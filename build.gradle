@@ -9,15 +9,25 @@ version = "${mod_version}"
 group = "${mod_group_id}"
 
 repositories {
-    // Create mod Maven
-    maven {
-        name = 'Create Maven'
-        url = 'https://maven.createmod.net'
-    }
     mavenCentral()
     mavenLocal()
-}
 
+    //Modrinth 仓库 (官方推荐写法)
+    exclusiveContent {
+        forRepository {
+            maven {
+                name = "Modrinth"
+                url = "https://api.modrinth.com/maven"
+
+            }
+        }
+        filter {
+            includeGroup "maven.modrinth"
+        }
+    }
+    maven { url = "https://raw.githubusercontent.com/Fuzss/modresources/main/maven/" }
+    maven { url = "https://maven.createmod.net" }
+}
 base {
     archivesName = mod_id
 }
@@ -56,14 +66,23 @@ neoForge {
 }
 
 dependencies {
-    // All mod dependencies (Create, CRN, DragonLib, etc.) loaded from local libs/ folder.
-    // Required JARs in libs/:
-    //   - create-1.21.1-X.X.X.jar      (Create mod)
-    //   - CreateRailwaysNavigator-*.jar (CRN)
-    //   - dragonlib-*.jar             (DragonLib, if not bundled in CRN jar)
-    compileOnly fileTree(dir: 'libs', include: '*.jar')
+    // ==========================================
+    // 彻底告别本地 libs，全部采用远程强类型 Maven 拉取！
+    // ==========================================
+
+    // --- Ponder ---
+    compileOnly "net.createmod.ponder:ponder-neoforge:1.0.81+mc1.21.1"
+    runtimeOnly "net.createmod.ponder:ponder-neoforge:1.0.81+mc1.21.1"
+
+    //CRN 和 DragonLib
+    compileOnly "maven.modrinth:create-railways-navigator:1.21.1-alpha-0.9.0-C6+2"
+    runtimeOnly "maven.modrinth:create-railways-navigator:1.21.1-alpha-0.9.0-C6+2"
+    compileOnly "maven.modrinth:dragonlib:M6CMBAur"
+    runtimeOnly "maven.modrinth:dragonlib:M6CMBAur"
+    compileOnly "maven.modrinth:create:mc1.21.1-6.0.9"
+    runtimeOnly "maven.modrinth:create:mc1.21.1-6.0.9"
+
 }
-configurations.compileClasspath.resolutionStrategy.force "net.createmod:ponder:+"
 // Mixin configuration
 configurations.configureEach {
     resolutionStrategy.force "net.sf.jopt-simple:jopt-simple:5.0.4"

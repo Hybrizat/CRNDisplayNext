@@ -5,5 +5,8 @@
   "gui.crndisplaynext.jre.direction_suffix": " for",
   "gui.crndisplaynext.jre.platform_suffix": " Platform",
   "gui.crndisplaynext.jre.separator": "   /   ",
-  "gui.crndisplaynext.jre.out_of_service": "No Service"
+  "gui.crndisplaynext.jre.out_of_service": "No Service",
+  "gui.crndisplaynext.jre_train_rext_mode": "Display Mode",
+  "enum.crndisplaynext.jre_train_text_mode.train_name": "Train Name",
+  "enum.crndisplaynext.jre_train_text_mode.category_name": "Train Category"
 }

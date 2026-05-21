@@ -19,14 +19,14 @@ public class CRNDisplayNextMod {
     public static final Logger LOGGER = LogManager.getLogger(MOD_ID);
 
     public CRNDisplayNextMod(IEventBus modEventBus, ModContainer modContainer) {
-        LOGGER.info("CRN Display Extended initializing...");
+        LOGGER.info("CRN Display Native Extended initializing...");
         modEventBus.addListener(this::registerPayloads);
         modEventBus.addListener(this::setup);
         modEventBus.addListener(this::clientSetup);
     }
 
     private void setup(FMLCommonSetupEvent event) {
-        LOGGER.info("CRN Display Extended common setup complete.");
+        LOGGER.info("CRN Display Native Extended common setup complete.");
     }
 
     private void clientSetup(FMLClientSetupEvent event) {
@@ -34,7 +34,7 @@ public class CRNDisplayNextMod {
         // enqueueWork ensures thread-safe registry access
         event.enqueueWork(() -> {
             ModDisplayTypesExt.init();
-            LOGGER.info("CRN Display Extended: registered {} custom display types.",
+            LOGGER.info("CRN Display Native Extended: registered {} custom display types.",
                 1); // update count as we add more
         });
     }
@@ -46,6 +46,6 @@ public class CRNDisplayNextMod {
             HideTechnicalStopsPacket.STREAM_CODEC,
             HideTechnicalStopsPacket::handle
         );
-        LOGGER.info("CRN Display Extended packets registered.");
+        LOGGER.info("CRN Display Native Extended packets registered.");
     }
 }
