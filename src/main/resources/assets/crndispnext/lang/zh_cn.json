@@ -6,7 +6,7 @@
   "gui.crndisplaynext.jre.platform_suffix": "站台",
   "gui.crndisplaynext.jre.separator": "  ／  ",
   "gui.crndisplaynext.jre.out_of_service": "☆☆☆☆本日运营已结束☆☆☆☆",
-  "gui.crndisplaynext.jre_train_rext_mode": "显示模式",
+  "gui.crndisplaynext.jre_train_text_mode": "显示模式",
   "enum.crndisplaynext.jre_train_text_mode.train_name": "列车名称",
   "enum.crndisplaynext.jre_train_text_mode.category_name": "列车类别"
 }
