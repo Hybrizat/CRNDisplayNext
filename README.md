@@ -1,4 +1,5 @@
 # CRN Display Native Extended
+English Readme is [HERE](https://github.com/Hybrizat/CRNDisplayNext/blob/Neoforge-1.21.1/README_en.md)
 
 Create: Railways Navigator Display Native Extended 是 Create: Railways Navigator 的附属模组
 
