@@ -1,0 +1,46 @@
+modLoader = "javafml"
+loaderVersion = "[4,)"
+license = "MIT"
+
+[[mixins]]
+config = "crndisplaynext.mixins.json"
+
+[[mods]]
+modId = "${mod_id}"
+version = "${mod_version}"
+displayName = "${mod_name}"
+description = '''
+${mod_description}
+'''
+logoFile = "crndisplaynext.png"
+authors = "${mod_authors}"
+displayURL = "https://github.com/hybrizat/crndisplaynext"
+
+[[dependencies.crndisplaynext]]
+modId = "neoforge"
+type = "required"
+versionRange = "${neo_version_range}"
+ordering = "NONE"
+side = "BOTH"
+
+[[dependencies.crndisplaynext]]
+modId = "minecraft"
+type = "required"
+versionRange = "${minecraft_version_range}"
+ordering = "NONE"
+side = "BOTH"
+
+[[dependencies.crndisplaynext]]
+modId = "create"
+type = "required"
+versionRange = "*"
+ordering = "AFTER"
+side = "BOTH"
+
+[[dependencies.crndisplaynext]]
+# Create: Train Navigator
+modId = "createrailwaysnavigator"
+type = "required"
+versionRange = "*"
+ordering = "AFTER"
+side = "BOTH"

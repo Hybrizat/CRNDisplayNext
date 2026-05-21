@@ -1,0 +1,19 @@
+{
+  "required": true,
+  "minVersion": "0.8",
+  "package": "com.hybrizat.crndisplaynext.mixin",
+  "compatibilityLevel": "JAVA_21",
+  "refmap": "crndisplaynext.refmap.json",
+  "mixins": [
+    "MixinAdvancedDisplayBE",
+    "MixinStationDisplayPrepare",
+    "MixinBasicTrainDisplayData",
+    "MixinBasicTrainDisplayDataFactory"
+  ],
+  "client": [
+    "MixinAdvancedDisplaySettingsWindow"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}

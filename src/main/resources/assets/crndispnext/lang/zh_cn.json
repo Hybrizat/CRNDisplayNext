@@ -1,0 +1,9 @@
+{
+  "gui.crndisplaynext.hide_technical_stops": "隐藏技术停车",
+  "gui.crndisplaynext.hide_technical_stops.description": "隐藏停站时长为0的站点。适用于折返时刻表（A-B-C-||-C-B-A），列车在终点站折返时不对旅客开放。",
+  "display_type.crndisplaynext.platform.jre_led": "JRE LED",
+  "gui.crndisplaynext.jre.direction_suffix": "方面",
+  "gui.crndisplaynext.jre.platform_suffix": "番線",
+  "gui.crndisplaynext.jre.separator": "  ／  ",
+  "gui.crndisplaynext.jre.out_of_service": "準備中"
+}

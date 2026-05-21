@@ -1,0 +1,109 @@
+plugins {
+    id 'java-library'
+    id 'eclipse'
+    id 'idea'
+    id 'net.neoforged.moddev' version '2.0.141'
+}
+
+version = "${mod_version}"
+group = "${mod_group_id}"
+
+repositories {
+    // Create mod Maven
+    maven {
+        name = 'Create Maven'
+        url = 'https://maven.createmod.net'
+    }
+    mavenCentral()
+    mavenLocal()
+}
+
+base {
+    archivesName = mod_id
+}
+
+java {
+    toolchain.languageVersion = JavaLanguageVersion.of(java_version)
+    withSourcesJar()
+}
+
+neoForge {
+    version = project.neo_version
+
+    parchment {
+        // Optional: better parameter names in IDE
+        // mappingsVersion = "2024.11.17"
+        // minecraftVersion = "1.21.1"
+    }
+
+    mods {
+        "${mod_id}" {
+            sourceSet(sourceSets.main)
+        }
+    }
+
+    runs {
+        client {
+            client()
+            systemProperty 'neoforge.enabledGameTestNamespaces', mod_id
+        }
+        server {
+            server()
+            programArgument '--nogui'
+            systemProperty 'neoforge.enabledGameTestNamespaces', mod_id
+        }
+    }
+}
+
+dependencies {
+    // All mod dependencies (Create, CRN, DragonLib, etc.) loaded from local libs/ folder.
+    // Required JARs in libs/:
+    //   - create-1.21.1-X.X.X.jar      (Create mod)
+    //   - CreateRailwaysNavigator-*.jar (CRN)
+    //   - dragonlib-*.jar             (DragonLib, if not bundled in CRN jar)
+    compileOnly fileTree(dir: 'libs', include: '*.jar')
+}
+configurations.compileClasspath.resolutionStrategy.force "net.createmod:ponder:+"
+// Mixin configuration
+configurations.configureEach {
+    resolutionStrategy.force "net.sf.jopt-simple:jopt-simple:5.0.4"
+}
+
+processResources {
+    var replaceProperties = [
+            minecraft_version      : minecraft_version,
+            minecraft_version_range: minecraft_version_range,
+            neo_version            : neo_version,
+            neo_version_range      : neo_version_range,
+            mod_id                 : mod_id,
+            mod_name               : mod_name,
+            mod_version            : mod_version,
+            mod_authors            : mod_authors,
+            mod_description        : mod_description,
+            java_version           : java_version,
+    ]
+    inputs.properties replaceProperties
+    filesMatching(['META-INF/neoforge.mods.toml']) {
+        expand replaceProperties
+    }
+}
+
+tasks.named('jar', Jar).configure {
+    manifest {
+        attributes([
+                'Specification-Title'   : mod_id,
+                'Specification-Vendor'  : mod_authors,
+                'Specification-Version' : '1',
+                'Implementation-Title'  : mod_name,
+                'Implementation-Version': mod_version,
+                'Implementation-Vendor' : mod_authors,
+        ])
+    }
+}
+
+idea {
+    module {
+        downloadSources = true
+        downloadJavadoc = true
+    }
+}
