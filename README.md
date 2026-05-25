@@ -26,5 +26,5 @@ Create: Railways Navigator Display Native Extended 是 Create: Railways Navigato
 ---
 ## 已知问题
 - 站前折返时如果两段时刻表分区的列车类别不同可能出现发车后短时间列车类别识别错误
-- 主要内容为左对齐，站台号为右对齐。无法设置内容尺寸、宽度。当显示器宽度不足时会出现问题。
+- 当显示器宽度不足时可能会出现问题。
 - *......*

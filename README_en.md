@@ -25,5 +25,5 @@ Create: Train Navigator Display Native Extended is an add-on mod for Create: Tra
 
 ## Known Issues
 - When performing a turn-back with two timetable segments having different train types, the train type may be incorrectly recognized for a short time after departure.
-- Main content is left-aligned, platform numbers are right-aligned. Content size and width cannot be set. Issues may occur when the display width is insufficient.
+- Issues may occur when the display width is insufficient.
 - *......*
