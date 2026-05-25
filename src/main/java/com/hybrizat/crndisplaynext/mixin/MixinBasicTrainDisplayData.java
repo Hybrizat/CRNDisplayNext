@@ -33,6 +33,9 @@ public abstract class MixinBasicTrainDisplayData implements IBasicTrainDisplayDa
     @Unique
     private static final WeakHashMap<BasicTrainDisplayData, Map<ETrainStopState, String>> CATEGORY_NAMES
         = new WeakHashMap<>();
+    @Unique
+    private static final WeakHashMap<BasicTrainDisplayData, String> TRAIN_ENTITY_NAMES
+        = new WeakHashMap<>();
 
     @Unique
     private static final String NBT_CATEGORY_COLORS = "crndisplaynext.CategoryColors";
@@ -62,6 +65,18 @@ public abstract class MixinBasicTrainDisplayData implements IBasicTrainDisplayDa
     public boolean crndisplaynext$hasCategoryColor(ETrainStopState state) {
         DLColor c = crndisplaynext$getCategoryColor(state);
         return c != null && !c.isTransparent();
+    }
+
+    @Override
+    @Unique
+    public String crndisplaynext$getTrainEntityName() {
+        return TRAIN_ENTITY_NAMES.getOrDefault((BasicTrainDisplayData)(Object)this, "");
+    }
+
+    @Override
+    @Unique
+    public void crndisplaynext$setTrainEntityName(String name) {
+        TRAIN_ENTITY_NAMES.put((BasicTrainDisplayData)(Object)this, name != null ? name : "");
     }
 
     @Override
