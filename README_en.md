@@ -27,3 +27,7 @@ Create: Train Navigator Display Native Extended is an add-on mod for Create: Tra
 - When performing a turn-back with two timetable segments having different train types, the train type may be incorrectly recognized for a short time after departure.
 - Issues may occur when the display width is insufficient.
 - *......*
+
+## Disclaimer
+- Although the currently implemented display style is named after `JRE`, it actually references the display methods of some private railways. Therefore, it can be considered a `JRE-flavored` display.
+- This mod makes extensive use of generative AI assistance. If this causes you any discomfort, we sincerely apologize.
