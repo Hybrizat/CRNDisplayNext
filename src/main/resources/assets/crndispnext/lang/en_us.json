@@ -22,5 +22,18 @@
   "gui.crndisplaynext.jre_show_arrow": "Show Direction Arrow",
   "gui.crndisplaynext.jre_left_platform": "← Left Platform",
   "gui.crndisplaynext.jre_right_platform": "→ Right Platform",
-  "gui.crndisplaynext.jre_platform_hint": "Enter station name or platform number. Supports * wildcard. Hover for more info."
+  "gui.crndisplaynext.jre_platform_hint": "Enter station name or platform number. Supports * wildcard. Hover for more info.",
+  "display.createrailwaysnavigator.train_destination.jre_front": "JRE Front",
+  "display.createrailwaysnavigator.train_destination.jre_side": "JRE Side",
+  "display.createrailwaysnavigator.passenger_information.jre_vis": "JRE VIS",
+  "enum.crndisplaynext.jre_front_b_content.destination": "Destination",
+  "enum.crndisplaynext.jre_front_b_content.line_name": "Line Name",
+  "enum.crndisplaynext.jre_side_mode.next_stop": "Next Stop (2-row)",
+  "enum.crndisplaynext.jre_side_mode.dest": "Destination",
+  "enum.crndisplaynext.jre_side_mode.line": "Line Name",
+  "gui.crndisplaynext.jre_front_b_content": "B Panel Content",
+  "gui.crndisplaynext.jre_front_b_content.description": "What to show in the right panel: destination or line name",
+  "gui.crndisplaynext.jre_side_mode": "Side Display Mode",
+  "gui.crndisplaynext.jre_side_mode.description": "Layout mode for the side destination board",
+  "gui.crndisplaynext.jre.next_stop_prefix": "Next: "
 }
