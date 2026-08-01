@@ -119,6 +119,7 @@ public class BERJREFront implements AbstractAdvancedDisplayRenderer<JREFrontSett
 
         String categoryName = "";
         DLColor categoryColor = DLColor.TRANSPARENT;
+        boolean catIsLineName = false;
         if (be.getTrainData().getTrainData() instanceof IBasicTrainDisplayDataExt ext) {
             categoryName  = ext.crndisplaynext$getCategoryName(stopState);
             categoryColor = ext.crndisplaynext$getCategoryColor(stopState);
@@ -127,6 +128,7 @@ public class BERJREFront implements AbstractAdvancedDisplayRenderer<JREFrontSett
         if (categoryName.isBlank()) {
             categoryName  = be.getTrainData().getTrainData().getName(stopState);
             categoryColor = be.getTrainData().getTrainData().getColor(stopState);
+            catIsLineName = true; // A already shows the line name
         }
 
         aLabel.text.set(TextUtils.text(categoryName).withStyle(ChatFormatting.BOLD));
@@ -138,16 +140,17 @@ public class BERJREFront implements AbstractAdvancedDisplayRenderer<JREFrontSett
             aLabel.backgroundColor.set(DLColor.TRANSPARENT);
             aLabel.color.set(font);
         }
-        aLabel.preferredWidth.set(Math.min(w / 3f, aLabel.getRenderedWidth() + 4));
-        aLabel.position.set(Point.of(3, centerY));
 
         // ── B label: Destination or Line ────────────────────────────────
         bLabel.clippingArea.set(clip);
         bLabel.glowing.set(be.isGlowing());
         bLabel.color.set(font);
 
+        boolean bIsLineName = settings.getBContent() == EJREFrontBContent.LINE_NAME;
         String bText;
-        if (settings.getBContent() == EJREFrontBContent.LINE_NAME) {
+        if (bIsLineName && catIsLineName) {
+            bText = ""; // A already shows the line name → B stays empty
+        } else if (bIsLineName) {
             bText = be.getTrainData().getTrainData().getName(stopState);
         } else {
             bText = be.getTrainData().getCurrentStop().isPresent()
@@ -155,8 +158,18 @@ public class BERJREFront implements AbstractAdvancedDisplayRenderer<JREFrontSett
         }
         bLabel.text.set(TextUtils.text(bText).withStyle(ChatFormatting.BOLD));
 
-        float bX = 3 + aLabel.preferredWidth.get() + 3;
-        bLabel.position.set(Point.of(bX, centerY));
-        bLabel.preferredWidth.set(w - 3 - bX);
+        boolean bEmpty = bText.isEmpty();
+        if (bEmpty) {
+            // B empty → A centered across the full display width
+            aLabel.preferredWidth.set((float)(w - 6));
+            bLabel.position.set(Point.of(w, centerY));
+            bLabel.preferredWidth.set(0f);
+        } else {
+            aLabel.preferredWidth.set(Math.min(w / 3f, aLabel.getRenderedWidth() + 4));
+            float bX = 3 + aLabel.preferredWidth.get() + 3;
+            bLabel.position.set(Point.of(bX, centerY));
+            bLabel.preferredWidth.set(w - 3 - bX);
+        }
+        aLabel.position.set(Point.of(3, centerY));
     }
 }

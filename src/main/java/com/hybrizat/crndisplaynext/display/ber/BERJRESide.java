@@ -130,6 +130,7 @@ public class BERJRESide implements AbstractAdvancedDisplayRenderer<JRESideSettin
 
         String catName  = "";
         DLColor catColor = DLColor.TRANSPARENT;
+        boolean catIsLineName = false;
         if (be.getTrainData().getTrainData() instanceof IBasicTrainDisplayDataExt ext) {
             catName  = ext.crndisplaynext$getCategoryName(stopState);
             catColor = ext.crndisplaynext$getCategoryColor(stopState);
@@ -137,6 +138,7 @@ public class BERJRESide implements AbstractAdvancedDisplayRenderer<JRESideSettin
         if (catName.isBlank()) {
             catName  = be.getTrainData().getTrainData().getName(stopState);
             catColor = be.getTrainData().getTrainData().getColor(stopState);
+            catIsLineName = true; // category area already shows the line name
         }
 
         categoryLabel.text.set(TextUtils.text(catName).withStyle(ChatFormatting.BOLD));
@@ -186,14 +188,22 @@ public class BERJRESide implements AbstractAdvancedDisplayRenderer<JRESideSettin
         } else {
             // Single row: category left, main right, vertically centered
             float rowY = h / 2f - 3f;
-            categoryLabel.position.set(Point.of(3, rowY));
-            mainLabel.position.set(Point.of(bX, rowY));
-            mainLabel.preferredWidth.set(w - 3 - bX);
-
-            if (mode == EJRESideMode.LINE) {
-                mainLabel.text.set(TextUtils.text(lineName).withStyle(ChatFormatting.BOLD));
+            boolean mainEmpty = (mode == EJRESideMode.LINE) && catIsLineName;
+            if (mainEmpty) {
+                // B empty → category centered across the full display width
+                categoryLabel.preferredWidth.set((float)(w - 6));
+                categoryLabel.position.set(Point.of(3, rowY));
+                mainLabel.text.set(TextUtils.empty());
             } else {
-                mainLabel.text.set(TextUtils.text(dest).withStyle(ChatFormatting.BOLD));
+                categoryLabel.preferredWidth.set(catW);
+                categoryLabel.position.set(Point.of(3, rowY));
+                mainLabel.position.set(Point.of(bX, rowY));
+                mainLabel.preferredWidth.set(w - 3 - bX);
+                if (mode == EJRESideMode.LINE) {
+                    mainLabel.text.set(TextUtils.text(lineName).withStyle(ChatFormatting.BOLD));
+                } else {
+                    mainLabel.text.set(TextUtils.text(dest).withStyle(ChatFormatting.BOLD));
+                }
             }
             nextLabel.text.set(TextUtils.empty());
         }

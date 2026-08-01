@@ -22,6 +22,9 @@ public final class ModDisplayTypesExt {
     // Passenger information
     public static DisplayTypeResourceKey JRE_VIS;
 
+    // Graphics display
+    public static DisplayTypeResourceKey JRE_GRAPHICS;
+
     public static void init() {
         if (initialized) return;
         initialized = true;
@@ -68,6 +71,15 @@ public final class ModDisplayTypesExt {
             "jre_vis",
             JREVISSettings::new,
             BERJREPassengerVIS::new,
+            new DisplayProperties(false, null)
+        );
+
+        // Graphics-capable display (custom rendering via RenderUtils)
+        JRE_GRAPHICS = AdvancedDisplaysRegistry.register(
+            EDisplayType.STATIC_TEXT,
+            "jre_graphics",
+            GraphicsDisplaySettings::new,
+            BERJREGraphics::new,
             new DisplayProperties(false, null)
         );
     }

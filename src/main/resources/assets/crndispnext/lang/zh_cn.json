@@ -35,5 +35,12 @@
   "gui.crndisplaynext.jre_front_b_content.description": "右侧B栏显示行先或线路名称",
   "gui.crndisplaynext.jre_side_mode": "侧面显示模式",
   "gui.crndisplaynext.jre_side_mode.description": "侧面方向幕的布局模式",
-  "gui.crndisplaynext.jre.next_stop_prefix": "次は "
+  "gui.crndisplaynext.jre.next_stop_prefix": "次は ",
+  "gui.crndisplayext.jre_vis_show_exit":   "显示开门方向指示",
+  "gui.crndisplayext.jre_vis_side_mounted":"侧面安装（显示本侧/对侧开门）",
+  "gui.crndisplayext.jre.vis.this_side_door":  "本側開",
+  "gui.crndisplayext.jre.vis.other_side_door": "対側開",
+  "gui.crndisplayext.jre.vis.left_door":        "← 開",
+  "gui.crndisplayext.jre.vis.right_door":       "開 →",
+  "gui.crndisplayext.jre.vis.please_wait":      "発車までしばらくお待ちください"
 }

@@ -2,6 +2,8 @@ package com.hybrizat.crndisplaynext.mixin;
 
 import com.hybrizat.crndisplaynext.CRNDisplayNextMod;
 import com.hybrizat.crndisplaynext.api.IAdvancedDisplayBEExt;
+import com.hybrizat.crndisplaynext.client.screen.GraphicsImageScreen;
+import com.hybrizat.crndisplaynext.display.settings.GraphicsDisplaySettings;
 import com.hybrizat.crndisplaynext.network.HideTechnicalStopsPacket;
 import de.mrjulsen.crn.block.blockentity.AdvancedDisplayBlockEntity;
 import de.mrjulsen.crn.client.gui.widgets.ModularWidgetContainer;
@@ -14,8 +16,11 @@ import de.mrjulsen.mcdragonlib.client.gui.widgets.components.DLToggleButton;
 import de.mrjulsen.mcdragonlib.client.gui.widgets.components.DLTooltip;
 import de.mrjulsen.mcdragonlib.client.gui.widgets.layout.FlowLayout;
 import de.mrjulsen.mcdragonlib.util.TextUtils;
+import net.minecraft.client.Minecraft;
+import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
+import net.minecraft.world.level.block.entity.BlockEntity;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.Unique;
@@ -23,6 +28,7 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
+import java.lang.reflect.Field;
 import java.util.List;
 
 @Mixin(value = AdvancedDisplaySettingsWindow.class, remap = false)
@@ -85,6 +91,32 @@ public abstract class MixinAdvancedDisplaySettingsWindow extends DLWindow {
         // reinit() calls setHeight() BEFORE buildGui() adds any lines, so the window
         // height doesn't account for our extra line. Add one line-height manually.
         // CreateButton.HEIGHT = height of one settings row (same as all other checkboxes)
+        setHeight(height() + CreateButton.HEIGHT + 2);
+    }
+
+    // ── Image button ───────────────────────────────────────────────────
+
+    @Unique private static final String GFX_LINE = "crndisplaynext.gfx_button";
+
+    @Inject(method = "reinit", at = @At("TAIL"), remap = false)
+    private void addGfxButton(CallbackInfo ci) {
+        try {
+            Field sf = AdvancedDisplaySettingsWindow.class.getDeclaredField("settings");
+            sf.setAccessible(true);
+            if (!(sf.get(this) instanceof GraphicsDisplaySettings)) return;
+        } catch (Exception e) { return; }
+
+        DLPanel line = advancedSettingsContainer.addLine(GFX_LINE);
+        var btn = new de.mrjulsen.mcdragonlib.client.gui.widgets.components.DLButton(0, 0, 200, CreateButton.HEIGHT);
+        btn.text.set(Component.literal("Configure Image..."));
+        btn.addEventListener(de.mrjulsen.mcdragonlib.client.gui.events.DLGuiStandardEvents.ClickEvent.class,
+            (b, evt) -> {
+                BlockPos pos = ((BlockEntity)(Object)blockEntity).getBlockPos();
+                Minecraft.getInstance().setScreen(new GraphicsImageScreen(pos, null));
+                return false;
+            });
+        line.addComponent(btn);
+        setHeight(height() + CreateButton.HEIGHT + 2);
         setHeight(height() + CreateButton.HEIGHT + 2);
     }
 }

@@ -1,6 +1,13 @@
 package com.hybrizat.crndisplaynext;
 
 import com.hybrizat.crndisplaynext.display.ModDisplayTypesExt;
+import com.hybrizat.crndisplaynext.client.FontLoader;
+import net.minecraft.client.Minecraft;
+import com.hybrizat.crndisplaynext.network.CacheListPayload;
+import com.hybrizat.crndisplaynext.network.FetchImagePayload;
+import com.hybrizat.crndisplaynext.network.ImageDataPayload;
+import com.hybrizat.crndisplaynext.network.GraphicsUrlPayload;
+import com.hybrizat.crndisplaynext.network.RequestCachePayload;
 import com.hybrizat.crndisplaynext.network.HideTechnicalStopsPacket;
 import net.neoforged.bus.api.IEventBus;
 import net.neoforged.fml.ModContainer;
@@ -30,22 +37,27 @@ public class CRNDisplayNextMod {
     }
 
     private void clientSetup(FMLClientSetupEvent event) {
-        // Register display types client-side (rendering only runs on client)
-        // enqueueWork ensures thread-safe registry access
         event.enqueueWork(() -> {
+            FontLoader.init(Minecraft.getInstance().gameDirectory);
             ModDisplayTypesExt.init();
-            LOGGER.info("CRN Display Native Extended: registered {} custom display types.",
-                1); // update count as we add more
+            LOGGER.info("CRN Display Native Extended: registered display types (JRE + Graphics).");
         });
     }
 
     private void registerPayloads(RegisterPayloadHandlersEvent event) {
         final PayloadRegistrar registrar = event.registrar(MOD_ID);
-        registrar.playToServer(
-            HideTechnicalStopsPacket.TYPE,
-            HideTechnicalStopsPacket.STREAM_CODEC,
-            HideTechnicalStopsPacket::handle
-        );
+        registrar.playToServer(HideTechnicalStopsPacket.TYPE,
+            HideTechnicalStopsPacket.STREAM_CODEC, HideTechnicalStopsPacket::handle);
+        registrar.playToServer(RequestCachePayload.TYPE,
+            RequestCachePayload.CODEC, RequestCachePayload::handle);
+        registrar.playToServer(GraphicsUrlPayload.TYPE,
+            GraphicsUrlPayload.CODEC, GraphicsUrlPayload::handle);
+        registrar.playToClient(CacheListPayload.TYPE,
+            CacheListPayload.CODEC, CacheListPayload::handle);
+        registrar.playToServer(FetchImagePayload.TYPE,
+            FetchImagePayload.CODEC, FetchImagePayload::handle);
+        registrar.playToClient(ImageDataPayload.TYPE,
+            ImageDataPayload.CODEC, ImageDataPayload::handle);
         LOGGER.info("CRN Display Native Extended packets registered.");
     }
 }

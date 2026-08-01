@@ -75,8 +75,8 @@ dependencies {
     runtimeOnly "net.createmod.ponder:ponder-neoforge:1.0.81+mc1.21.1"
 
     //CRN 和 DragonLib
-    compileOnly "maven.modrinth:create-railways-navigator:1.21.1-alpha-0.9.0-C6+2"
-    runtimeOnly "maven.modrinth:create-railways-navigator:1.21.1-alpha-0.9.0-C6+2"
+    compileOnly "maven.modrinth:create-railways-navigator:1.21.1-beta-0.9.1-C6"
+    runtimeOnly "maven.modrinth:create-railways-navigator:1.21.1-beta-0.9.1-C6"
     compileOnly "maven.modrinth:dragonlib:M6CMBAur"
     runtimeOnly "maven.modrinth:dragonlib:M6CMBAur"
     compileOnly "maven.modrinth:create:mc1.21.1-6.0.9"
