@@ -17,7 +17,7 @@ Create: Train Navigator Display Native Extended is an add-on mod for [Create: Tr
 
 ## Mod Dependencies
 - Create 6.0.9
-- Create: Railways Navigator alpha 0.9.0 C6+2
+- Create: Railways Navigator alpha 0.9.1 C6
 - DragonLib beta 3.0.24
 
 *Only tested with the above mod versions; compatibility with other versions is not guaranteed.*
