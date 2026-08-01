@@ -1,16 +1,17 @@
 # CRN Display Native Extended
 
-Create: Train Navigator Display Native Extended is an add-on mod for Create: Train Navigator.
+Create: Train Navigator Display Native Extended is an add-on mod for [Create: Train Navigator](https://github.com/MisterJulsen/Create-Train-Navigator).
 
 ## Features
 - **Hide Technical Stops**: For turn-back schedules (A-B-C-||-C-B-A), stops with a dwell time of 0 are hidden, allowing the display to show correctly (C→B instead of C→C).
-- **New Display Format**: JR East-style platform departure boards, (planned) VIS and destination indicators.
+- **New Display Format**: JR East-style platform departure boards, VIS and destination indicators.
 
 ---
 
 ## Future Plans
 - CR, JRW, and other style displays
 - Line detail displays
+- Improve the content displayed on the VIS (e.g. add a loop line display, include information on stations that have already been passed, etc.)
 
 ---
 
