@@ -1,5 +1,7 @@
 package com.hybrizat.crndisplaynext.display.ber;
 
+import com.hybrizat.crndisplaynext.CRNDisplayNextMod;
+
 import com.hybrizat.crndisplaynext.client.DynamicTextureHolder;
 import com.hybrizat.crndisplaynext.display.settings.GraphicsDisplaySettings;
 import com.hybrizat.crndisplaynext.network.FetchImagePayload;
@@ -26,7 +28,10 @@ public class BERJREGraphics implements AbstractAdvancedDisplayRenderer<GraphicsD
 
     private static final DLColor BG = DLColor.fromInt(0xFF1a1a2e);
     private static final Map<Long, DynamicTextureHolder> holders = new HashMap<>();
-    private static final Map<Long, String> pendingUrls = new ConcurrentHashMap<>();
+    /** key → request start time (ms). Pending server fetch requests. */
+    private static final Map<Long, Long> pendingUrls = new ConcurrentHashMap<>();
+    /** If the server hasn't replied within this window, fall back to client-side download. */
+    private static final long FETCH_TIMEOUT_MS = 5000L;
     private static Level lastLevel;
 
     private static final int P = 16;
@@ -42,7 +47,7 @@ public class BERJREGraphics implements AbstractAdvancedDisplayRenderer<GraphicsD
                                   float partial, AdvancedDisplayRenderInstance parent,
                                   int light, boolean backSide) {
         var be = graphics.blockEntity();
-        if (!be.isController()) return;
+        if (!be.isController()) { logThrottled("[Gfx] render: not controller"); return; }
 
         if (be.getLevel() != lastLevel) { closeAll(); lastLevel = be.getLevel(); }
 
@@ -54,7 +59,8 @@ public class BERJREGraphics implements AbstractAdvancedDisplayRenderer<GraphicsD
         RenderUtils.fillColor(graphics,
             new Vector3f(M, M, 0.01f), cachedW - 2*M, cachedH - 2*M, BG, facing);
 
-        if (url.isBlank()) return;
+        if (url.isBlank()) { logThrottled("[Gfx] render: url blank"); return; }
+        CRNDisplayNextMod.LOGGER.info("[Gfx] render: url='{}'", url);
 
         int texW = be.getXSizeScaled() * TEX;
         int texH = be.getYSizeScaled() * TEX;
@@ -66,9 +72,19 @@ public class BERJREGraphics implements AbstractAdvancedDisplayRenderer<GraphicsD
         }
         if (h != null) {
             h.resize(texW, texH, url);
-            // Request image from server cache (deduplicated via pendingUrls)
-            if (!h.isReady() && pendingUrls.putIfAbsent(key, url) == null) {
-                FetchImagePayload.request(be.getBlockPos(), url);
+            if (!h.isReady()) {
+                Long started = pendingUrls.putIfAbsent(key, System.currentTimeMillis());
+                if (started == null) {
+                    // First request → ask the server cache
+                    CRNDisplayNextMod.LOGGER.info("[Gfx] requesting from server: {}", url);
+                    FetchImagePayload.request(be.getBlockPos(), url);
+                } else if (System.currentTimeMillis() - started > FETCH_TIMEOUT_MS) {
+                    // Server never replied (dedicated-server download failed).
+                    // Fall back to client-side direct download.
+                    CRNDisplayNextMod.LOGGER.info("[Gfx] server timeout, direct download: {}", url);
+                    pendingUrls.remove(key);
+                    h.loadUrl(url);
+                }
             }
             if (h.isReady()) {
                 RenderUtils.renderTexture(
@@ -87,6 +103,16 @@ public class BERJREGraphics implements AbstractAdvancedDisplayRenderer<GraphicsD
         if (!be.isController()) { cachedW = cachedH = 0; return; }
         cachedW = be.getXSizeScaled() * P;
         cachedH = be.getYSizeScaled() * P;
+    }
+
+    /** Throttle repetitive render diagnostics to at most once per second. */
+    private static long lastLogTime = 0;
+    private static void logThrottled(String msg) {
+        long now = System.currentTimeMillis();
+        if (now - lastLogTime >= 1000L) {
+            lastLogTime = now;
+            CRNDisplayNextMod.LOGGER.info(msg);
+        }
     }
 
     /** Called from ImageDataPayload handler on client. */

@@ -33,14 +33,17 @@ public class CRNDisplayNextMod {
     }
 
     private void setup(FMLCommonSetupEvent event) {
+        // Display-type registry must be populated on BOTH sides — the dedicated
+        // server needs the DisplayTypeResourceKey objects (and settings factory)
+        // to persist/read NBT and to resolve the jre_graphics type.
+        event.enqueueWork(ModDisplayTypesExt::init);
         LOGGER.info("CRN Display Native Extended common setup complete.");
     }
 
     private void clientSetup(FMLClientSetupEvent event) {
         event.enqueueWork(() -> {
             FontLoader.init(Minecraft.getInstance().gameDirectory);
-            ModDisplayTypesExt.init();
-            LOGGER.info("CRN Display Native Extended: registered display types (JRE + Graphics).");
+            LOGGER.info("CRN Display Native Extended: client setup complete.");
         });
     }
 

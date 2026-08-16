@@ -1,5 +1,7 @@
 package com.hybrizat.crndisplaynext.server;
 
+import com.hybrizat.crndisplaynext.CRNDisplayNextMod;
+
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.world.level.storage.LevelResource;
 
@@ -71,7 +73,7 @@ public class ServerImageCache {
                     .timeout(Duration.ofSeconds(15)).GET().build();
                 var resp = HTTP.send(req, HttpResponse.BodyHandlers.ofInputStream());
                 if (resp.statusCode() != 200) {
-                    System.err.println("[Cache] HTTP " + resp.statusCode() + " for " + url);
+                    CRNDisplayNextMod.LOGGER.warn("[Cache] HTTP {} for {}", resp.statusCode(), url);
                     return null;
                 }
                 BufferedImage img = ImageIO.read(resp.body());
@@ -79,7 +81,7 @@ public class ServerImageCache {
 
                 // Save image
                 ImageIO.write(img, "PNG", imgFile.toFile());
-                System.err.println("[Cache] Saved: " + id + " (" + img.getWidth() + "x" + img.getHeight() + ")");
+                CRNDisplayNextMod.LOGGER.info("[Cache] Saved: {} ({}x{})", id, img.getWidth(), img.getHeight());
 
                 // Save thumbnail (64×64 max)
                 int tw = Math.min(64, img.getWidth());
@@ -96,7 +98,7 @@ public class ServerImageCache {
                     System.currentTimeMillis());
                 writeMeta(metaFile, entry);
                 return entry;
-            } catch (Exception e) { return null; }
+            } catch (Exception e) { CRNDisplayNextMod.LOGGER.error("[Cache] Download failed for {}: {}", url, e.toString()); return null; }
         });
     }
 

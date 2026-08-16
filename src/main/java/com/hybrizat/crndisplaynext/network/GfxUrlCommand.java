@@ -21,30 +21,63 @@ public class GfxUrlCommand {
 
     @SubscribeEvent
     public static void registerServer(RegisterCommandsEvent event) {
+        CRNDisplayNextMod.LOGGER.info("[GfxUrl] RegisterCommandsEvent fired, registering /gfxurl");
         event.getDispatcher().register(
             Commands.literal("gfxurl")
                 .then(Commands.argument("url", StringArgumentType.greedyString())
                     .executes(ctx -> {
                         String url = StringArgumentType.getString(ctx, "url");
                         var p = ctx.getSource().getPlayerOrException();
+                        CRNDisplayNextMod.LOGGER.info("[GfxUrl] executed by {} url={}",
+                            p.getName().getString(), url);
                         var hit = p.pick(20, 0, false);
-                        if (!(hit instanceof BlockHitResult bhr)) return 0;
+                        if (!(hit instanceof BlockHitResult bhr)) {
+                            CRNDisplayNextMod.LOGGER.info("[GfxUrl] no block in sight");
+                            return 0;
+                        }
                         var be = p.level().getBlockEntity(bhr.getBlockPos());
-                        if (be instanceof AdvancedDisplayBlockEntity adbe) {
-                            var s = adbe.getSettings();
-                            if (s instanceof GraphicsDisplaySettings gs) {
-                                gs.setImageUrl(url);
-                                adbe.setDisplayType(adbe.getDisplayType(), gs);
-                                adbe.setChanged();
-                                // Cache on server
-                                ServerImageCache.get(p.getServer()).downloadAndCache(url);
-                                if (p.level() instanceof ServerLevel sl)
-                                    sl.sendBlockUpdated(bhr.getBlockPos(),
-                                        be.getBlockState(), be.getBlockState(), 3);
-                                return 1;
+                        if (!(be instanceof AdvancedDisplayBlockEntity adbe)) {
+                            CRNDisplayNextMod.LOGGER.info("[GfxUrl] not a display BE at {}", bhr.getBlockPos());
+                            return 0;
+                        }
+                        // Diagnose: which display type / controller / settings does this block carry?
+                        CRNDisplayNextMod.LOGGER.info("[GfxUrl] BE at {} displayType={} controller={} settings={}",
+                            bhr.getBlockPos(),
+                            adbe.getDisplayType() == null ? "null" : adbe.getDisplayType().toString(),
+                            adbe.isController(),
+                            adbe.getSettings() == null ? "null" : adbe.getSettings().getClass().getSimpleName());
+                        // Accept existing GraphicsDisplaySettings, or auto-switch the
+                        // block to the jre_graphics display type.
+                        var s = adbe.getSettings();
+                        com.hybrizat.crndisplaynext.display.settings.GraphicsDisplaySettings gs;
+                        if (s instanceof com.hybrizat.crndisplaynext.display.settings.GraphicsDisplaySettings gs0) {
+                            gs = gs0;
+                        } else {
+                            CRNDisplayNextMod.LOGGER.info("[GfxUrl] switching display to jre_graphics (was {})",
+                                s == null ? "null" : s.getClass().getSimpleName());
+                            gs = new com.hybrizat.crndisplaynext.display.settings.GraphicsDisplaySettings();
+                            adbe.setDisplayType(com.hybrizat.crndisplaynext.display.ModDisplayTypesExt.JRE_GRAPHICS, gs);
+                        }
+                        gs.setImageUrl(url);
+                        adbe.setDisplayType(adbe.getDisplayType(), gs);
+                        adbe.setChanged();
+                        // Cache on server
+                        ServerImageCache.get(p.getServer()).downloadAndCache(url);
+                        if (p.level() instanceof ServerLevel sl) {
+                            sl.sendBlockUpdated(bhr.getBlockPos(),
+                                be.getBlockState(), be.getBlockState(), 3);
+                            // Push BE NBT (incl. imgUrl) to all online players so
+                            // clients on dedicated servers pick up the new URL.
+                            var updatePacket = adbe.getUpdatePacket();
+                            if (updatePacket != null) {
+                                for (net.minecraft.server.level.ServerPlayer sp :
+                                        sl.getServer().getPlayerList().getPlayers()) {
+                                    sp.connection.send(updatePacket);
+                                }
                             }
                         }
-                        return 0;
+                        CRNDisplayNextMod.LOGGER.info("[GfxUrl] set url {} at {}", url, bhr.getBlockPos());
+                        return 1;
                     }))
         );
     }

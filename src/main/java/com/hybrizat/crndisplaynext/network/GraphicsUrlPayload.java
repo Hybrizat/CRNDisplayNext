@@ -48,8 +48,17 @@ public record GraphicsUrlPayload(BlockPos pos, String url) implements CustomPack
                     }
                     adbe.setDisplayType(adbe.getDisplayType(), gs);
                     adbe.setChanged();
-                    if (be.getLevel() instanceof ServerLevel sl)
+                    if (be.getLevel() instanceof ServerLevel sl) {
                         sl.sendBlockUpdated(p.pos(), be.getBlockState(), be.getBlockState(), 3);
+                        // Dedicated-server fix: explicitly push the BE NBT (incl. imgUrl)
+                        // to every online player so the client reads the updated settings.
+                        var updatePacket = adbe.getUpdatePacket();
+                        if (updatePacket != null) {
+                            for (net.minecraft.server.level.ServerPlayer sp : sl.getServer().getPlayerList().getPlayers()) {
+                                sp.connection.send(updatePacket);
+                            }
+                        }
+                    }
                 }
             }
         });

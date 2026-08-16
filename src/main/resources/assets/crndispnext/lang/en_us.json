@@ -26,6 +26,7 @@
   "display.createrailwaysnavigator.train_destination.jre_front": "JRE Front",
   "display.createrailwaysnavigator.train_destination.jre_side": "JRE Side",
   "display.createrailwaysnavigator.passenger_information.jre_vis": "JRE VIS",
+  "display.createrailwaysnavigator.static_text.jre_graphics": "JRE Graphics",
   "enum.crndisplaynext.jre_front_b_content.destination": "Destination",
   "enum.crndisplaynext.jre_front_b_content.line_name": "Line Name",
   "enum.crndisplaynext.jre_side_mode.next_stop": "Next Stop (2-row)",
