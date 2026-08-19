@@ -21,6 +21,7 @@ import de.mrjulsen.mcdragonlib.client.util.RenderUtils;
 import de.mrjulsen.mcdragonlib.util.DLColor;
 import de.mrjulsen.mcdragonlib.util.time.DLTime;
 import de.mrjulsen.mcdragonlib.util.time.TimeContext;
+import net.minecraft.client.Minecraft;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.HorizontalDirectionalBlock;
@@ -57,7 +58,8 @@ public class BERJREPassengerVIS implements AbstractAdvancedDisplayRenderer<JREVI
     private static final int FONT_STOPS = 22, FONT_TIME = 14;
 
     enum Page { FULL_ROUTE, FIVE_STATION }
-    private static final Map<Long, DynamicTextureHolder> H = new HashMap<>();
+    private record Entry(AdvancedDisplayBlockEntity be, DynamicTextureHolder holder) {}
+    private static final Map<Long, Entry> H = new HashMap<>();
     private Page page = Page.FULL_ROUTE;
     private long pageStart;
     private int cw = 16, ch = 16;
@@ -76,9 +78,12 @@ public class BERJREPassengerVIS implements AbstractAdvancedDisplayRenderer<JREVI
                                   AdvancedDisplayRenderInstance p, int l, boolean bs) {
         var be = g.blockEntity();
         if (!be.isController()) return;
-        var holder = H.get(be.getBlockPos().asLong());
-        if (holder == null || !holder.isReady()) return;
-        RenderUtils.renderTexture(holder.getId(), g,
+        long key = be.getBlockPos().asLong();
+        Entry entry = H.get(key);
+        if (entry != null && entry.be() != be) release(key);
+        entry = H.get(key);
+        if (entry == null || !entry.holder().isReady()) return;
+        RenderUtils.renderTexture(entry.holder().getId(), g,
             new Vector3f(2, 2, 0.02f), cw - 4, ch - 4,
             0, 0, 1, 1,
             be.getBlockState().getValue(HorizontalDirectionalBlock.FACING),
@@ -93,7 +98,14 @@ public class BERJREPassengerVIS implements AbstractAdvancedDisplayRenderer<JREVI
         cw = be.getXSizeScaled() * 16;
         ch = be.getYSizeScaled() * 16;
         long k = be.getBlockPos().asLong();
-        var holder = H.computeIfAbsent(k, _k -> new DynamicTextureHolder(SW, SH));
+        Entry entry = H.get(k);
+        if (entry != null && entry.be() != be) release(k);
+        entry = H.get(k);
+        if (entry == null) {
+            entry = new Entry(be, new DynamicTextureHolder(SW, SH));
+            H.put(k, entry);
+        }
+        var holder = entry.holder();
         holder.resize(SW, SH, null);
         BufferedImage img = new BufferedImage(SW, SH, BufferedImage.TYPE_INT_RGB);
         Graphics2D g2 = img.createGraphics();
@@ -398,5 +410,21 @@ public class BERJREPassengerVIS implements AbstractAdvancedDisplayRenderer<JREVI
             g.drawString(ch, cx - cw/2, top + asc + j * font.getSize());
         }
     }
-    public static void release(long key) { var h = H.remove(key); if (h != null) h.close(); }
+    /** Release holders whose block entity is gone or no longer a passenger-VIS display. */
+    public static void sweep() {
+        var level = Minecraft.getInstance().level;
+        if (level == null) return;
+        for (long key : new ArrayList<>(H.keySet())) {
+            Entry e = H.get(key);
+            if (e == null) continue;
+            var be = e.be();
+            if (level.getBlockEntity(be.getBlockPos()) != be
+                    || !be.isController()
+                    || !(be.getSettings() instanceof JREVISSettings)) {
+                release(key);
+            }
+        }
+    }
+
+    public static void release(long key) { var e = H.remove(key); if (e != null) e.holder().close(); }
 }

@@ -2,6 +2,7 @@ package com.hybrizat.crndisplaynext;
 
 import com.hybrizat.crndisplaynext.display.ModDisplayTypesExt;
 import com.hybrizat.crndisplaynext.client.FontLoader;
+import com.hybrizat.crndisplaynext.client.TextureHolderSweeper;
 import net.minecraft.client.Minecraft;
 import com.hybrizat.crndisplaynext.network.CacheListPayload;
 import com.hybrizat.crndisplaynext.network.FetchImagePayload;
@@ -41,6 +42,7 @@ public class CRNDisplayNextMod {
     }
 
     private void clientSetup(FMLClientSetupEvent event) {
+        net.neoforged.neoforge.common.NeoForge.EVENT_BUS.addListener(TextureHolderSweeper::onLevelTick);
         event.enqueueWork(() -> {
             FontLoader.init(Minecraft.getInstance().gameDirectory);
             LOGGER.info("CRN Display Native Extended: client setup complete.");
