@@ -1,7 +1,5 @@
 {
 
-  "block.crndisplaynext.graphics_display": "Graphics Display",
-  "item.crndisplaynext.graphics_display": "Graphics Display",
 "gui.crndisplaynext.hide_technical_stops": "Hide Technical Stops",
   "gui.crndisplaynext.hide_technical_stops.description": "Hide stops with 0 dwell time from the display. Useful for turnaround schedules (A-B-C-||-C-B-A) where the train reverses at a terminus without serving passengers.",
   "display_type.crndisplaynext.platform.jre_led": "JRE LED",

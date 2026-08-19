@@ -1,8 +1,0 @@
-{
-  "variants": {
-    "facing=north": { "model": "crndisplaynext:block/graphics_display" },
-    "facing=east":  { "model": "crndisplaynext:block/graphics_display", "y": 90 },
-    "facing=south": { "model": "crndisplaynext:block/graphics_display", "y": 180 },
-    "facing=west":  { "model": "crndisplaynext:block/graphics_display", "y": 270 }
-  }
-}
