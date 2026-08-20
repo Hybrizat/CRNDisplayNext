@@ -106,7 +106,7 @@ public class BERJREPassengerVIS implements AbstractAdvancedDisplayRenderer<JREVI
             H.put(k, entry);
         }
         var holder = entry.holder();
-        holder.resize(SW, SH, null);
+        holder.resize(SW, SH);
         BufferedImage img = new BufferedImage(SW, SH, BufferedImage.TYPE_INT_RGB);
         Graphics2D g2 = img.createGraphics();
         g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);

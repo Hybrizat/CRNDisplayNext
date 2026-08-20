@@ -13,6 +13,7 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.neoforged.neoforge.network.handling.IPayloadContext;
 import com.hybrizat.crndisplaynext.server.ServerImageCache;
+import com.hybrizat.crndisplaynext.util.ImageUrlPolicy;
 
 /**
  * Client→Server: set image URL for graphics display.
@@ -33,6 +34,11 @@ public record GraphicsUrlPayload(BlockPos pos, String url) implements CustomPack
 
     public static void handle(GraphicsUrlPayload p, IPayloadContext ctx) {
         ctx.enqueueWork(() -> {
+            if (!ImageUrlPolicy.isPlausibleImageUrl(p.url())) {
+                CRNDisplayNextMod.LOGGER.warn("[GfxUrl] rejected non-image URL from {}: {}",
+                    ctx.player().getName().getString(), p.url());
+                return;
+            }
             BlockEntity be = ctx.player().level().getBlockEntity(p.pos());
             if (be instanceof AdvancedDisplayBlockEntity adbe) {
                 var settings = adbe.getSettings();

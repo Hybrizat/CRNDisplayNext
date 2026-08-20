@@ -3,6 +3,7 @@ package com.hybrizat.crndisplaynext.network;
 import com.hybrizat.crndisplaynext.CRNDisplayNextMod;
 import com.hybrizat.crndisplaynext.display.settings.GraphicsDisplaySettings;
 import com.hybrizat.crndisplaynext.server.ServerImageCache;
+import com.hybrizat.crndisplaynext.util.ImageUrlPolicy;
 import com.mojang.brigadier.arguments.StringArgumentType;
 import de.mrjulsen.crn.block.blockentity.AdvancedDisplayBlockEntity;
 import net.minecraft.commands.Commands;
@@ -30,6 +31,12 @@ public class GfxUrlCommand {
                         var p = ctx.getSource().getPlayerOrException();
                         CRNDisplayNextMod.LOGGER.info("[GfxUrl] executed by {} url={}",
                             p.getName().getString(), url);
+                        if (!ImageUrlPolicy.isPlausibleImageUrl(url)) {
+                            CRNDisplayNextMod.LOGGER.warn("[GfxUrl] rejected non-image URL: {}", url);
+                            p.displayClientMessage(net.minecraft.network.chat.Component.literal(
+                                "Not an image URL — use an http(s) link with an image extension (.png/.jpg/...)"), false);
+                            return 0;
+                        }
                         var hit = p.pick(20, 0, false);
                         if (!(hit instanceof BlockHitResult bhr)) {
                             CRNDisplayNextMod.LOGGER.info("[GfxUrl] no block in sight");

@@ -10,35 +10,24 @@ import org.slf4j.LoggerFactory;
 import javax.imageio.ImageIO;
 import java.awt.image.BufferedImage;
 import java.io.ByteArrayInputStream;
-import java.io.InputStream;
-import java.net.URI;
-import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
-import java.net.http.HttpResponse;
-import java.time.Duration;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * Manages NativeImage + DynamicTexture for the graphics display.
- * Async HTTP download → BufferedImage → NativeImage → DynamicTexture.
+ *
+ * <p>All downloads are server-driven (see FetchImagePayload / ImageDataPayload);
+ * this class only receives bytes. Decoding runs on the worker thread
+ * {@link ImageExecutors#CLIENT_DECODE}; the GL upload stays on the main thread.</p>
  */
 public class DynamicTextureHolder implements AutoCloseable {
 
     private static final Logger LOG = LoggerFactory.getLogger(DynamicTextureHolder.class);
-    private static final HttpClient HTTP = HttpClient.newBuilder()
-        .connectTimeout(Duration.ofSeconds(10))
-        .followRedirects(HttpClient.Redirect.NORMAL)
-        .build();
-    private static final int MAX_DIM = 4096;
 
     private NativeImage image;
     private DynamicTexture texture;
     private ResourceLocation id;
     private int width, height;
     private boolean ready, closed;
-    private final AtomicBoolean loading = new AtomicBoolean(false);
-    private String lastUrl = "";
 
     public DynamicTextureHolder(int w, int h) {
         this.width = w; this.height = h;
@@ -51,17 +40,13 @@ public class DynamicTextureHolder implements AutoCloseable {
         image = new NativeImage(NativeImage.Format.RGBA, w, h, false);
         fillColor(0x00000000);
         texture = new DynamicTexture(image);
-        id = Minecraft.getInstance().getTextureManager()
-            .register("crndisplaynext/gfx_", texture);
+        id = Minecraft.getInstance().getTextureManager().register("crndisplaynext/gfx_", texture);
     }
 
-    public void resize(int w, int h, String reloadUrl) {
+    /** Reallocate the texture; the server re-delivers the image on next request. */
+    public void resize(int w, int h) {
         if (w == width && h == height) return;
         allocate(w, h);
-        if (reloadUrl != null && !reloadUrl.isBlank()) {
-            lastUrl = ""; // force reload
-            loadUrl(reloadUrl);
-        }
     }
 
     private void freeGl() {
@@ -100,47 +85,32 @@ public class DynamicTextureHolder implements AutoCloseable {
 
     public void upload() { if (texture != null) texture.upload(); }
 
-    public void loadUrl(String url) {
-        if (url == null || url.isBlank()) return;
-        if (url.equals(lastUrl) && (loading.get() || ready)) return;
-        if (closed) return;
-        lastUrl = url;
-        loading.set(true); ready = false;
-
-        var req = HttpRequest.newBuilder().uri(URI.create(url))
-            .timeout(Duration.ofSeconds(15)).GET().build();
-
-        CompletableFuture.supplyAsync(() -> {
+    /**
+     * Decode server-delivered image bytes on the worker thread, then copy +
+     * upload on the main thread.
+     */
+    public void loadBytes(byte[] data) {
+        if (closed || data == null || data.length == 0) return;
+        ready = false;
+        CompletableFuture.runAsync(() -> {
+            BufferedImage bi;
             try {
-                var resp = HTTP.send(req, HttpResponse.BodyHandlers.ofInputStream());
-                if (resp.statusCode() != 200) { LOG.warn("HTTP {} for {}", resp.statusCode(), url); return null; }
-                var bi = ImageIO.read(resp.body());
-                if (bi == null) { LOG.warn("Cannot decode: {}", url); return null; }
-                if (bi.getWidth() > MAX_DIM || bi.getHeight() > MAX_DIM) {
-                    LOG.warn("Image too large ({}×{}): {}", bi.getWidth(), bi.getHeight(), url);
-                    return null;
-                }
-                return bi;
-            } catch (Exception e) { LOG.error("Failed to load {}: {}", url, e.getMessage()); return null; }
-        }).thenAccept(bi -> Minecraft.getInstance().execute(() -> {
-            loading.set(false);
-            if (closed || bi == null) return;
-            copyFromBuffered(bi); upload(); ready = true;
-        }));
+                bi = ImageIO.read(new ByteArrayInputStream(data));
+            } catch (Exception e) {
+                LOG.error("Failed to decode image bytes", e);
+                return;
+            }
+            if (bi == null) { LOG.warn("Cannot decode delivered image bytes"); return; }
+            Minecraft.getInstance().execute(() -> {
+                if (closed) return;
+                copyFromBuffered(bi);
+                upload();
+                ready = true;
+            });
+        }, ImageExecutors.CLIENT_DECODE);
     }
 
     public boolean isReady() { return ready && !closed; }
-    public void loadBytes(byte[] data) {
-        if (closed) return;
-        try {
-            var bi = ImageIO.read(new ByteArrayInputStream(data));
-            if (bi == null) return;
-            ready = false;
-            Minecraft.getInstance().execute(() -> {
-                copyFromBuffered(bi); upload(); ready = true;
-            });
-        } catch (Exception e) { LOG.error("Failed to load bytes", e); }
-    }
     public ResourceLocation getId() { return id; }
     public int getWidth() { return width; }
     public int getHeight() { return height; }

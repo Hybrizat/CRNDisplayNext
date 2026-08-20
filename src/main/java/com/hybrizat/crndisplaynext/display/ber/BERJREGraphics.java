@@ -1,10 +1,11 @@
 package com.hybrizat.crndisplaynext.display.ber;
 
 import com.hybrizat.crndisplaynext.CRNDisplayNextMod;
-
 import com.hybrizat.crndisplaynext.client.DynamicTextureHolder;
+import com.hybrizat.crndisplaynext.client.ImageReassembler;
 import com.hybrizat.crndisplaynext.display.settings.GraphicsDisplaySettings;
 import com.hybrizat.crndisplaynext.network.FetchImagePayload;
+import com.hybrizat.crndisplaynext.util.ImageUrlPolicy;
 import de.mrjulsen.crn.block.blockentity.AdvancedDisplayBlockEntity;
 import de.mrjulsen.crn.block.blockentity.AdvancedDisplayBlockEntity.EUpdateReason;
 import de.mrjulsen.crn.client.ber.AdvancedDisplayRenderInstance;
@@ -19,12 +20,18 @@ import net.minecraft.world.level.block.HorizontalDirectionalBlock;
 import net.minecraft.world.level.block.state.BlockState;
 import org.joml.Vector3f;
 
-import javax.imageio.ImageIO;
-import java.awt.image.BufferedImage;
-import java.io.ByteArrayInputStream;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 
+/**
+ * Renderer for the jre_graphics display type.
+ *
+ * <p>The client never downloads images itself: it requests from the server
+ * (FetchImagePayload) and receives chunked image data (ImageDataPayload).
+ * If the server does not deliver within the timeout window, the URL is marked
+ * failed instead of falling back to a client-side download, so the server
+ * stays the single download authority (cache + URL policy).</p>
+ */
 public class BERJREGraphics implements AbstractAdvancedDisplayRenderer<GraphicsDisplaySettings> {
 
     private static final DLColor BG = DLColor.fromInt(0xFF1a1a2e);
@@ -32,7 +39,9 @@ public class BERJREGraphics implements AbstractAdvancedDisplayRenderer<GraphicsD
     private static final Map<Long, Entry> holders = new HashMap<>();
     /** key → request start time (ms). Pending server fetch requests. */
     private static final Map<Long, Long> pendingUrls = new ConcurrentHashMap<>();
-    /** If the server hasn't replied within this window, fall back to client-side download. */
+    /** key → URL the server failed to deliver; do not re-request until it changes. */
+    private static final Map<Long, String> failedUrls = new ConcurrentHashMap<>();
+    /** If the server hasn't replied within this window, stop retrying (and log). */
     private static final long FETCH_TIMEOUT_MS = 5000L;
     private static Level lastLevel;
 
@@ -76,19 +85,24 @@ public class BERJREGraphics implements AbstractAdvancedDisplayRenderer<GraphicsD
         }
         DynamicTextureHolder h = entry != null ? entry.holder() : null;
         if (h != null) {
-            h.resize(texW, texH, url);
+            h.resize(texW, texH);
             if (!h.isReady()) {
-                Long started = pendingUrls.putIfAbsent(key, System.currentTimeMillis());
-                if (started == null) {
-                    // First request → ask the server cache
-                    CRNDisplayNextMod.LOGGER.info("[Gfx] requesting from server: {}", url);
-                    FetchImagePayload.request(be.getBlockPos(), url);
-                } else if (System.currentTimeMillis() - started > FETCH_TIMEOUT_MS) {
-                    // Server never replied (dedicated-server download failed).
-                    // Fall back to client-side direct download.
-                    CRNDisplayNextMod.LOGGER.info("[Gfx] server timeout, direct download: {}", url);
-                    pendingUrls.remove(key);
-                    h.loadUrl(url);
+                if (!ImageUrlPolicy.isPlausibleImageUrl(url)) {
+                    logThrottled("[Gfx] not an image URL (need http(s) + image extension): " + url);
+                } else if (url.equals(failedUrls.get(key))) {
+                    // Already failed for this URL; wait for the user to change it.
+                } else {
+                    Long started = pendingUrls.putIfAbsent(key, System.currentTimeMillis());
+                    if (started == null) {
+                        // First request → ask the server (cache or download).
+                        CRNDisplayNextMod.LOGGER.info("[Gfx] requesting from server: {}", url);
+                        FetchImagePayload.request(be.getBlockPos(), url);
+                    } else if (System.currentTimeMillis() - started > FETCH_TIMEOUT_MS) {
+                        // Server never replied (download failed or URL rejected).
+                        pendingUrls.remove(key);
+                        failedUrls.put(key, url);
+                        CRNDisplayNextMod.LOGGER.warn("[Gfx] server did not deliver image for {}; marked failed until URL changes", url);
+                    }
                 }
             }
             if (h.isReady()) {
@@ -103,8 +117,7 @@ public class BERJREGraphics implements AbstractAdvancedDisplayRenderer<GraphicsD
     }
 
     @Override public void update(Level level, BlockPos pos, BlockState state,
-                                  AdvancedDisplayBlockEntity be,
-                                  AdvancedDisplayRenderInstance parent, EUpdateReason reason) {
+                                AdvancedDisplayBlockEntity be, AdvancedDisplayRenderInstance parent, EUpdateReason reason) {
         if (!be.isController()) { cachedW = cachedH = 0; return; }
         cachedW = be.getXSizeScaled() * P;
         cachedH = be.getYSizeScaled() * P;
@@ -120,7 +133,7 @@ public class BERJREGraphics implements AbstractAdvancedDisplayRenderer<GraphicsD
         }
     }
 
-    /** Called from ImageDataPayload handler on client. */
+    /** Called from ImageDataPayload handler (client) once a full image arrived. */
     public static void onImageData(BlockPos pos, byte[] data) {
         long key = pos.asLong();
         pendingUrls.remove(key);
@@ -133,6 +146,8 @@ public class BERJREGraphics implements AbstractAdvancedDisplayRenderer<GraphicsD
     public static void release(long key) {
         var e = holders.remove(key);
         pendingUrls.remove(key);
+        failedUrls.remove(key);
+        ImageReassembler.drop(key);
         if (e != null) e.holder().close();
     }
 
@@ -156,5 +171,7 @@ public class BERJREGraphics implements AbstractAdvancedDisplayRenderer<GraphicsD
         for (var e : holders.values()) e.holder().close();
         holders.clear();
         pendingUrls.clear();
+        failedUrls.clear();
+        ImageReassembler.clear();
     }
 }

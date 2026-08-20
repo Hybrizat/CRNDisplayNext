@@ -1,6 +1,7 @@
 package com.hybrizat.crndisplaynext.server;
 
 import com.hybrizat.crndisplaynext.CRNDisplayNextMod;
+import com.hybrizat.crndisplaynext.util.ImageUrlPolicy;
 
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.world.level.storage.LevelResource;
@@ -17,17 +18,38 @@ import java.security.MessageDigest;
 import java.time.Duration;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 /**
- * Server-side image cache. Downloads images from URLs, stores to disk,
- * and provides a listing for client browsing.
+ * Server-side image cache. Downloads images from URLs on a dedicated worker
+ * thread, stores them to disk, and provides a listing for client browsing.
+ *
+ * <p>Thread model: HTTP I/O and image decoding run on the "crn-image-download"
+ * thread, so the server main thread is never blocked. Callers that must send
+ * packets with the result should hop back via {@code server.execute(...)}
+ * (see FetchImagePayload).</p>
  */
 public class ServerImageCache {
+
+    /** Max image bytes transferred to a client (16 MiB). */
+    public static final int MAX_IMAGE_BYTES = 16 * 1024 * 1024;
+    /** Chunk size for network transfer (64 KiB per packet). */
+    public static final int CHUNK_SIZE = 64 * 1024;
+    private static final int MAX_DIM = 4096;
 
     private static final HttpClient HTTP = HttpClient.newBuilder()
         .connectTimeout(Duration.ofSeconds(10))
         .followRedirects(HttpClient.Redirect.NORMAL)
         .build();
+
+    /** Dedicated download thread — keeps HTTP I/O off the server main thread. */
+    private static final ExecutorService DOWNLOAD_EXEC =
+        Executors.newSingleThreadExecutor(r -> {
+            Thread t = new Thread(r, "crn-image-download");
+            t.setDaemon(true);
+            return t;
+        });
 
     public record CacheEntry(String id, String url, int width, int height, long timestamp) {}
 
@@ -54,8 +76,18 @@ public class ServerImageCache {
         } catch (Exception e) { return Integer.toHexString(url.hashCode()); }
     }
 
-    /** Download image from URL and cache to disk. Returns cache entry or null. */
+    /** @return true if the URL passed the image-format policy gate. */
+    private static boolean isDownloadable(String url) {
+        if (!ImageUrlPolicy.isPlausibleImageUrl(url)) {
+            CRNDisplayNextMod.LOGGER.warn("[Cache] refusing non-image URL: {}", url);
+            return false;
+        }
+        return true;
+    }
+
+    /** Download image from URL and cache to disk (async). Returns cache entry or null. */
     public CompletableFuture<CacheEntry> downloadAndCache(String url) {
+        if (!isDownloadable(url)) return CompletableFuture.completedFuture(null);
         String id = hash(url);
         Path imgFile = cacheDir.resolve(id + ".png");
         Path metaFile = cacheDir.resolve(id + ".meta");
@@ -77,10 +109,20 @@ public class ServerImageCache {
                     return null;
                 }
                 BufferedImage img = ImageIO.read(resp.body());
-                if (img == null || img.getWidth() > 4096 || img.getHeight() > 4096) return null;
+                if (img == null || img.getWidth() > MAX_DIM || img.getHeight() > MAX_DIM) {
+                    CRNDisplayNextMod.LOGGER.warn("[Cache] undecodable or oversized image ({}x{}): {}",
+                        img == null ? 0 : img.getWidth(), img == null ? 0 : img.getHeight(), url);
+                    return null;
+                }
 
                 // Save image
                 ImageIO.write(img, "PNG", imgFile.toFile());
+                if (Files.size(imgFile) > MAX_IMAGE_BYTES) {
+                    CRNDisplayNextMod.LOGGER.warn("[Cache] image exceeds {} bytes, rejecting: {}",
+                        MAX_IMAGE_BYTES, url);
+                    Files.deleteIfExists(imgFile);
+                    return null;
+                }
                 CRNDisplayNextMod.LOGGER.info("[Cache] Saved: {} ({}x{})", id, img.getWidth(), img.getHeight());
 
                 // Save thumbnail (64×64 max)
@@ -99,17 +141,20 @@ public class ServerImageCache {
                 writeMeta(metaFile, entry);
                 return entry;
             } catch (Exception e) { CRNDisplayNextMod.LOGGER.error("[Cache] Download failed for {}: {}", url, e.toString()); return null; }
-        });
+        }, DOWNLOAD_EXEC);
     }
 
-    /** Cache-first: return cached bytes or download+return. */
+    /** Cache-first: return cached bytes or download+return (async). */
     public CompletableFuture<byte[]> getOrDownload(String url) {
+        if (!ImageUrlPolicy.isPlausibleImageUrl(url)) return CompletableFuture.completedFuture(null);
         String id = hash(url);
         Path imgFile = cacheDir.resolve(id + ".png");
         if (Files.exists(imgFile)) {
-            try {
-                return CompletableFuture.completedFuture(Files.readAllBytes(imgFile));
-            } catch (IOException e) {}
+            // Disk read off the main thread as well.
+            return CompletableFuture.supplyAsync(() -> {
+                try { return Files.readAllBytes(imgFile); }
+                catch (IOException e) { return null; }
+            }, DOWNLOAD_EXEC);
         }
         return downloadAndCache(url).thenCompose(entry -> {
             if (entry == null) return CompletableFuture.completedFuture(null);
