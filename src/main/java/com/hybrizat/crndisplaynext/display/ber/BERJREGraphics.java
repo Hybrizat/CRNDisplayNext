@@ -71,7 +71,7 @@ public class BERJREGraphics implements AbstractAdvancedDisplayRenderer<GraphicsD
             new Vector3f(M, M, 0.01f), cachedW - 2*M, cachedH - 2*M, BG, facing);
 
         if (url.isBlank()) { logThrottled("[Gfx] render: url blank"); return; }
-        CRNDisplayNextMod.LOGGER.info("[Gfx] render: url='{}'", url);
+        if (CRNDisplayNextMod.LOGGER.isDebugEnabled()) CRNDisplayNextMod.LOGGER.debug("[Gfx] render: url='{}'", url);
 
         int texW = be.getXSizeScaled() * TEX;
         int texH = be.getYSizeScaled() * TEX;

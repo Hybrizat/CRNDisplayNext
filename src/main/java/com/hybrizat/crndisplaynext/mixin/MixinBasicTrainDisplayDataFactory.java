@@ -86,6 +86,10 @@ public class MixinBasicTrainDisplayDataFactory {
         BasicTrainDisplayData result = cir.getReturnValue();
         if (!(result instanceof IBasicTrainDisplayDataExt ext)) return;
 
+        // Restore the raw train entity name (written by MixinBasicTrainDisplayData.onToNbt)
+        if (nbt.contains("crndisplaynext.TrainEntityName")) {
+            ext.crndisplaynext$setTrainEntityName(nbt.getString("crndisplaynext.TrainEntityName"));
+        }
         if (!nbt.contains("crndisplaynext.CategoryColors")) return;
         CompoundTag colors = nbt.getCompound("crndisplaynext.CategoryColors");
         CompoundTag names  = nbt.getCompound("crndisplaynext.CategoryNames");

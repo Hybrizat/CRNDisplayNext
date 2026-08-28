@@ -88,6 +88,9 @@ public class JREVISSettings extends BasicDisplaySettings implements
             setShowDoNotBoardText(s.showDoNotBoardText());
             setShowConnection(s.showConnections());
             setShowStats(s.showStats());
+            setCircularMode(s.circularMode());
+            setPageIntervalSecs(s.getPageIntervalSecs());
+            setPrefixMode(s.getPrefixMode());
         }
     }
 
@@ -101,6 +104,9 @@ public class JREVISSettings extends BasicDisplaySettings implements
         nbt.putBoolean("JREVIS_Stats",        showStats);
         nbt.putByte("JREVIS_CarriageIdx",     carriageIndex);
         nbt.putBoolean("JREVIS_OverCarriage", overwriteCarriage);
+        nbt.putBoolean("JREVIS_Circular",     circularMode);
+        nbt.putInt("JREVIS_PageInterval",     pageIntervalSecs);
+        nbt.putByte("JREVIS_PrefixMode",      prefixMode);
     }
 
     @Override
@@ -113,5 +119,8 @@ public class JREVISSettings extends BasicDisplaySettings implements
         if (nbt.contains("JREVIS_Stats"))       showStats      = nbt.getBoolean("JREVIS_Stats");
         if (nbt.contains("JREVIS_CarriageIdx")) carriageIndex  = nbt.getByte("JREVIS_CarriageIdx");
         if (nbt.contains("JREVIS_OverCarriage"))overwriteCarriage = nbt.getBoolean("JREVIS_OverCarriage");
+        if (nbt.contains("JREVIS_Circular"))   circularMode   = nbt.getBoolean("JREVIS_Circular");
+        if (nbt.contains("JREVIS_PageInterval")) pageIntervalSecs = Math.max(1, nbt.getInt("JREVIS_PageInterval"));
+        if (nbt.contains("JREVIS_PrefixMode"))  prefixMode   = nbt.getByte("JREVIS_PrefixMode");
     }
 }

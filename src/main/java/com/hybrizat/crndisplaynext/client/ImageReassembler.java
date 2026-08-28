@@ -14,21 +14,34 @@ public final class ImageReassembler {
 
     /** Defensive cap: reject absurdly large transfers (>16 MiB at 64 KiB/chunk). */
     private static final int MAX_CHUNKS = 256;
+    /** Drop transfers that make no progress for this long (server died
+     *  mid-transfer, player disconnected, ...). Without this, the held
+     *  chunk arrays would leak until level change / display release. */
+    private static final long STALE_AFTER_MS = 30_000;
 
     private static final class State {
         final int total;
         final byte[][] parts;
         int received;
+        long lastActive;
 
         State(int total) {
             this.total = total;
             this.parts = new byte[total][];
+            this.lastActive = System.currentTimeMillis();
         }
     }
 
     private static final Map<Long, State> states = new ConcurrentHashMap<>();
 
     private ImageReassembler() {}
+
+    private static void sweepStale() { // caller must hold the states lock
+        long now = System.currentTimeMillis();
+        for (java.util.Map.Entry<Long, State> e : states.entrySet()) {
+            if (now - e.getValue().lastActive > STALE_AFTER_MS) states.remove(e.getKey());
+        }
+    }
 
     /**
      * Accept one chunk of an image transfer.
@@ -41,6 +54,7 @@ public final class ImageReassembler {
             return null;
         }
         synchronized (states) {
+            sweepStale();
             State st = states.get(key);
             if (st == null || st.total != total) {
                 st = new State(total);
@@ -48,6 +62,7 @@ public final class ImageReassembler {
             }
             if (st.parts[seq] != null) return null; // duplicate chunk
             st.parts[seq] = chunk;
+            st.lastActive = System.currentTimeMillis();
             st.received++;
             if (st.received < total) return null;
 

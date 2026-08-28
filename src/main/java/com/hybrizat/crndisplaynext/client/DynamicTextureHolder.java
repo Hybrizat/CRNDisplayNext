@@ -60,9 +60,16 @@ public class DynamicTextureHolder implements AutoCloseable {
     public void fillColor(int argb) {
         if (image == null) return;
         int abgr = argbToAbgr(argb);
-        for (int y = 0; y < height; y++)
-            for (int x = 0; x < width; x++)
-                image.setPixelRGBA(x, y, abgr);
+        // Bulk row-major fill avoids per-pixel bounds-checked native calls,
+        // which matter on large canvases (VIS is 730×420 ≈ 306k pixels).
+        try {
+            int[] all = image.getPixelsRGBA();
+            for (int i = 0; i < all.length; i++) all[i] = abgr;
+        } catch (Throwable t) {
+            for (int y = 0; y < height; y++)
+                for (int x = 0; x < width; x++)
+                    image.setPixelRGBA(x, y, abgr);
+        }
     }
 
     public void copyFromBuffered(BufferedImage src) {
@@ -78,9 +85,17 @@ public class DynamicTextureHolder implements AutoCloseable {
             g.drawImage(src, 0, 0, width, height, null);
             g.dispose();
         }
-        for (int y = 0; y < height; y++)
-            for (int x = 0; x < width; x++)
-                image.setPixelRGBA(x, y, argbToAbgr(scaled.getRGB(x, y)));
+        // Bulk int-array copy (single getRGB pass) instead of W×H getRGB calls.
+        try {
+            int[] pixels = new int[width * height];
+            scaled.getRGB(0, 0, width, height, pixels, 0, width);
+            int[] all = image.getPixelsRGBA();
+            for (int i = 0; i < all.length; i++) all[i] = argbToAbgr(pixels[i]);
+        } catch (Throwable t) {
+            for (int y = 0; y < height; y++)
+                for (int x = 0; x < width; x++)
+                    image.setPixelRGBA(x, y, argbToAbgr(scaled.getRGB(x, y)));
+        }
     }
 
     public void upload() { if (texture != null) texture.upload(); }

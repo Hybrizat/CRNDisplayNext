@@ -103,5 +103,6 @@ public abstract class MixinBasicTrainDisplayData implements IBasicTrainDisplayDa
         }
         nbt.put(NBT_CATEGORY_COLORS, colors);
         nbt.put(NBT_CATEGORY_NAMES,  names);
+        nbt.putString("crndisplaynext.TrainEntityName", crndisplaynext$getTrainEntityName());
     }
 }

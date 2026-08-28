@@ -42,6 +42,15 @@ public final class ImageUrlPolicy {
 
         if (uri.getHost() == null || uri.getHost().isEmpty()) return false;
 
+        // Block loopback / link-local / well-known cloud-metadata targets
+        // (server-side fetches must not be steered at internal services).
+        // LAN hosts (192.168.x, 10.x, 172.16-31.x) remain allowed for local image servers.
+        String host = uri.getHost().toLowerCase(Locale.ROOT);
+        if (host.equals("localhost") || host.equals("::1")) return false;
+        if (host.startsWith("127.") || host.startsWith("169.254.")) return false;
+        if (host.equals("100.100.100.200") || host.equals("metadata.google.internal")
+                || host.equals("instance-data")) return false;
+
         String path = uri.getPath();
         if (path == null || path.isEmpty()) return false;
         int slash = path.lastIndexOf('/');

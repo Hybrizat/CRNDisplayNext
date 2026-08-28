@@ -134,7 +134,6 @@ public final class FontLoader {
     private static void register(Font f) {
         FONTS.put(f.getFontName().toLowerCase(Locale.ROOT), f);
         FONTS.put(f.getFamily().toLowerCase(Locale.ROOT), f);
-            ;
     }
 
     private static Font tryLoad(String filename) {

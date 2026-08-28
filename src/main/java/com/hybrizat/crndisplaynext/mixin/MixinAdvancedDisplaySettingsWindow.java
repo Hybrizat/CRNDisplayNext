@@ -117,6 +117,5 @@ public abstract class MixinAdvancedDisplaySettingsWindow extends DLWindow {
             });
         line.addComponent(btn);
         setHeight(height() + CreateButton.HEIGHT + 2);
-        setHeight(height() + CreateButton.HEIGHT + 2);
     }
 }

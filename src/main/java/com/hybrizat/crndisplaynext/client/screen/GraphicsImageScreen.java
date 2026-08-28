@@ -83,14 +83,25 @@ public class GraphicsImageScreen extends Screen {
             String[] p = s.split("\t", -1);
             if (p.length < 5) continue;
             ResourceLocation tex = null;
-            if (!p[4].isEmpty()) try {
-                byte[] b = Base64.getDecoder().decode(p[4]);
-                NativeImage ni = NativeImage.read(new java.io.ByteArrayInputStream(b));
-                var dt = new DynamicTexture(ni);
-                tex = ResourceLocation.fromNamespaceAndPath("crndisplaynext", "thumb/" + (texIdx++));
-                Minecraft.getInstance().getTextureManager().register(tex, dt);
-            } catch (Exception e) {}
-            cachedEntries.add(new Cached(p[0], p[1], Integer.parseInt(p[2]), Integer.parseInt(p[3]), tex));
+            NativeImage ni = null;
+            DynamicTexture dt = null;
+            try {
+                int w = Integer.parseInt(p[2]);
+                int h = Integer.parseInt(p[3]);
+                if (!p[4].isEmpty()) {
+                    byte[] b = Base64.getDecoder().decode(p[4]);
+                    ni = NativeImage.read(new java.io.ByteArrayInputStream(b));
+                    dt = new DynamicTexture(ni);
+                    tex = ResourceLocation.fromNamespaceAndPath("crndisplaynext", "thumb/" + (texIdx++));
+                    Minecraft.getInstance().getTextureManager().register(tex, dt);
+                }
+                cachedEntries.add(new Cached(p[0], p[1], w, h, tex));
+            } catch (Exception e) {
+                // One bad entry must not abort the whole list, and any
+                // partially-created native resources must be released.
+                if (dt != null) dt.close();
+                if (ni != null) ni.close();
+            }
         }
     }
 
@@ -169,6 +180,12 @@ public class GraphicsImageScreen extends Screen {
                 return null;
             }
         }, ImageExecutors.CLIENT_DECODE).thenAccept(small -> Minecraft.getInstance().execute(() -> {
+            // The screen may have been closed while the decode was in flight —
+            // registering a texture then would leak it (no onClose to release it).
+            if (Minecraft.getInstance().screen != this) {
+                if (small != null) small.flush();
+                return;
+            }
             if (small == null) { status = Component.literal("Preview failed (undecodable image)"); return; }
             releasePreview();
             NativeImage ni = new NativeImage(NativeImage.Format.RGBA, small.getWidth(), small.getHeight(), false);
@@ -241,7 +258,16 @@ public class GraphicsImageScreen extends Screen {
         return super.mouseClicked(mx, my, btn);
     }
 
-    @Override public void onClose() { releasePreview(); super.onClose(); }
+    @Override public void onClose() {
+        releasePreview();
+        // Release all cached-thumbnail textures — they were registered in the
+        // global TextureManager and would otherwise stay resident after close.
+        for (Cached c : cachedEntries) {
+            if (c.tex() != null) { try { Minecraft.getInstance().getTextureManager().release(c.tex()); } catch (Exception ignored) {} }
+        }
+        cachedEntries.clear();
+        super.onClose();
+    }
     @Override public boolean isPauseScreen() { return false; }
 
     @Override public void onFilesDrop(List<Path> paths) {

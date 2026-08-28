@@ -55,15 +55,30 @@ public class ServerImageCache {
 
     private final Path cacheDir;
 
+    /** Deduplicates concurrent downloads of the same URL (single-threaded executor
+     *  would otherwise re-download the same image once per requesting player). */
+    private final Map<String, CompletableFuture<CacheEntry>> inFlight = new java.util.concurrent.ConcurrentHashMap<>();
+
     public ServerImageCache(Path worldDir) {
         this.cacheDir = worldDir.resolve("crndisplaynext").resolve("cache");
         try { Files.createDirectories(cacheDir); } catch (IOException e) {}
     }
 
+    // Per-server singleton: the per-instance "in-flight" dedup map below would
+    // silently stop working if get() created a fresh instance per call (old
+    // instances are dropped as their server is garbage-collected).
+    private static final Map<MinecraftServer, ServerImageCache> INSTANCES =
+        java.util.Collections.synchronizedMap(new java.util.WeakHashMap<>());
+
     public static ServerImageCache get(MinecraftServer server) {
-        Path worldDir = server.getWorldPath(LevelResource.ROOT);
-        return new ServerImageCache(worldDir);
+        synchronized (INSTANCES) {
+            return INSTANCES.computeIfAbsent(server, s ->
+                new ServerImageCache(s.getWorldPath(LevelResource.ROOT)));
+        }
     }
+
+    /** The single-threaded download executor (also usable for disk reads). */
+    public static java.util.concurrent.ExecutorService downloadExecutor() { return DOWNLOAD_EXEC; }
 
     /** Hash URL to a cache ID */
     public static String hash(String url) {
@@ -99,6 +114,18 @@ public class ServerImageCache {
             } catch (Exception e) {}
         }
 
+        // Reuse a download that is already running for this URL instead of
+        // starting a second one (players hammering "Load" / many displays).
+        CompletableFuture<CacheEntry> existing = inFlight.get(url);
+        if (existing != null) return existing;
+
+        CompletableFuture<CacheEntry> future = supplyDownload(url, imgFile, metaFile, id);
+        inFlight.put(url, future);
+        future.whenComplete((r, ex) -> inFlight.remove(url, future));
+        return future;
+    }
+
+    private CompletableFuture<CacheEntry> supplyDownload(String url, Path imgFile, Path metaFile, String id) {
         return CompletableFuture.supplyAsync(() -> {
             try {
                 var req = HttpRequest.newBuilder().uri(URI.create(url))
@@ -175,6 +202,11 @@ public class ServerImageCache {
 
     /** List all cached entries */
     public List<CacheEntry> listEntries() {
+        return listEntries(Integer.MAX_VALUE);
+    }
+
+    /** List the newest cached entries, at most {@code limit} of them. */
+    public List<CacheEntry> listEntries(int limit) {
         List<CacheEntry> list = new ArrayList<>();
         try (var stream = Files.newDirectoryStream(cacheDir, "*.meta")) {
             for (Path p : stream) {
@@ -182,6 +214,7 @@ public class ServerImageCache {
             }
         } catch (IOException e) {}
         list.sort((a, b) -> Long.compare(b.timestamp(), a.timestamp()));
+        if (limit < list.size()) list = list.subList(0, Math.max(0, limit));
         return list;
     }
 
