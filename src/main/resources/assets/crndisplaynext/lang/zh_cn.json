@@ -26,7 +26,7 @@
   "display.createrailwaysnavigator.train_destination.jre_front": "JRE 前面幕",
   "display.createrailwaysnavigator.train_destination.jre_side": "JRE 侧面幕",
   "display.createrailwaysnavigator.passenger_information.jre_vis": "JRE 乘客VIS",
-  "display.createrailwaysnavigator.static_text.jre_graphics": "JRE 图形显示",
+  "display.createrailwaysnavigator.static_text.jre_graphics": "自定义图片显示",
   "enum.crndisplaynext.jre_front_b_content.destination": "行先",
   "enum.crndisplaynext.jre_front_b_content.line_name": "线路名称",
   "enum.crndisplaynext.jre_side_mode.next_stop": "次站模式（双行）",
