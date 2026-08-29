@@ -3,6 +3,7 @@ package com.hybrizat.crndisplaynext.client.screen;
 import com.hybrizat.crndisplaynext.CRNDisplayNextMod;
 import com.hybrizat.crndisplaynext.client.ImageExecutors;
 import com.hybrizat.crndisplaynext.network.FetchImagePayload;
+import com.hybrizat.crndisplaynext.network.NetworkManager;
 import com.hybrizat.crndisplaynext.network.GraphicsUrlPayload;
 import com.hybrizat.crndisplaynext.network.RequestCachePayload;
 import com.hybrizat.crndisplaynext.util.ImageUrlPolicy;
@@ -15,8 +16,7 @@ import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.renderer.texture.DynamicTexture;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
-import net.minecraft.resources.ResourceLocation;
-import net.neoforged.neoforge.network.PacketDistributor;
+import net.minecraft.resources.ResourceLocation;
 
 import javax.imageio.ImageIO;
 import java.awt.image.BufferedImage;
@@ -35,7 +35,7 @@ import java.util.concurrent.CompletableFuture;
 public class GraphicsImageScreen extends Screen {
 
     private static final ResourceLocation PREVIEW_TEX =
-        ResourceLocation.fromNamespaceAndPath(CRNDisplayNextMod.MOD_ID, "gfx_preview");
+        new ResourceLocation(CRNDisplayNextMod.MOD_ID, "gfx_preview");
     private static final long PREVIEW_TIMEOUT_MS = 10_000L;
 
     /** Called by CacheListPayload handler to deliver the cache listing to the open screen. */
@@ -92,7 +92,7 @@ public class GraphicsImageScreen extends Screen {
                     byte[] b = Base64.getDecoder().decode(p[4]);
                     ni = NativeImage.read(new java.io.ByteArrayInputStream(b));
                     dt = new DynamicTexture(ni);
-                    tex = ResourceLocation.fromNamespaceAndPath("crndisplaynext", "thumb/" + (texIdx++));
+                    tex = new ResourceLocation("crndisplaynext", "thumb/" + (texIdx++));
                     Minecraft.getInstance().getTextureManager().register(tex, dt);
                 }
                 cachedEntries.add(new Cached(p[0], p[1], w, h, tex));
@@ -137,7 +137,7 @@ public class GraphicsImageScreen extends Screen {
                 return;
             }
             urlDraft = u;
-            PacketDistributor.sendToServer(new GraphicsUrlPayload(bePos, u));
+            NetworkManager.CHANNEL.sendToServer(new GraphicsUrlPayload(bePos, u));
         }
         onClose();
     }

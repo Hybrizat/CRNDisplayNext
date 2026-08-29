@@ -1,16 +1,13 @@
 package com.hybrizat.crndisplaynext.network;
 
-import com.hybrizat.crndisplaynext.CRNDisplayNextMod;
 import com.hybrizat.crndisplaynext.client.ImageReassembler;
 import com.hybrizat.crndisplaynext.client.screen.GraphicsImageScreen;
 import com.hybrizat.crndisplaynext.display.ber.BERJREGraphics;
-import io.netty.buffer.ByteBuf;
 import net.minecraft.core.BlockPos;
-import net.minecraft.network.codec.ByteBufCodecs;
-import net.minecraft.network.codec.StreamCodec;
-import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
-import net.minecraft.resources.ResourceLocation;
-import net.neoforged.neoforge.network.handling.IPayloadContext;
+import net.minecraft.network.FriendlyByteBuf;
+import net.minecraftforge.network.NetworkEvent;
+
+import java.util.function.Supplier;
 
 /**
  * Server→Client: one chunk of an image (see FetchImagePayload).
@@ -19,23 +16,22 @@ import net.neoforged.neoforge.network.handling.IPayloadContext;
  * the full image is handed to the display texture holder and, if open, to the
  * image-settings screen (live preview).</p>
  */
-public record ImageDataPayload(BlockPos pos, int seq, int total, byte[] chunk) implements CustomPacketPayload {
+public record ImageDataPayload(BlockPos pos, int seq, int total, byte[] chunk) {
 
-    public static final Type<ImageDataPayload> TYPE =
-        new Type<>(ResourceLocation.fromNamespaceAndPath(CRNDisplayNextMod.MOD_ID, "img_data"));
+    public static void toBytes(ImageDataPayload p, FriendlyByteBuf buf) {
+        buf.writeBlockPos(p.pos());
+        buf.writeVarInt(p.seq());
+        buf.writeVarInt(p.total());
+        buf.writeByteArray(p.chunk());
+    }
 
-    public static final StreamCodec<ByteBuf, ImageDataPayload> CODEC =
-        StreamCodec.composite(
-            BlockPos.STREAM_CODEC,        ImageDataPayload::pos,
-            ByteBufCodecs.VAR_INT,        ImageDataPayload::seq,
-            ByteBufCodecs.VAR_INT,        ImageDataPayload::total,
-            ByteBufCodecs.BYTE_ARRAY,     ImageDataPayload::chunk,
-            ImageDataPayload::new);
+    public static ImageDataPayload read(FriendlyByteBuf buf) {
+        return new ImageDataPayload(
+            buf.readBlockPos(), buf.readVarInt(), buf.readVarInt(), buf.readByteArray());
+    }
 
-    @Override public Type<? extends CustomPacketPayload> type() { return TYPE; }
-
-    public static void handle(ImageDataPayload p, IPayloadContext ctx) {
-        ctx.enqueueWork(() -> {
+    public static void handle(ImageDataPayload p, Supplier<NetworkEvent.Context> ctxSupplier) {
+        ctxSupplier.get().enqueueWork(() -> {
             long key = p.pos().asLong();
             byte[] full = ImageReassembler.onChunk(key, p.seq(), p.total(), p.chunk());
             if (full == null) return; // more chunks still expected

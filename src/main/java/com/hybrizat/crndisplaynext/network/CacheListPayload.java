@@ -1,37 +1,32 @@
 package com.hybrizat.crndisplaynext.network;
 
-import com.hybrizat.crndisplaynext.CRNDisplayNextMod;
-import io.netty.buffer.ByteBuf;
-import net.minecraft.network.codec.ByteBufCodecs;
-import net.minecraft.network.codec.StreamCodec;
-import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
-import net.minecraft.resources.ResourceLocation;
-import net.neoforged.neoforge.network.handling.IPayloadContext;
+import com.hybrizat.crndisplaynext.client.screen.GraphicsImageScreen;
+import net.minecraft.network.FriendlyByteBuf;
+import net.minecraftforge.network.NetworkEvent;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.function.Supplier;
 
 /**
  * Server→Client: list of cached image info strings.
- * Each entry: "id\turl\twidth\theight"
+ * Each entry: "id\turl\twidth\theight\tbase64thumb"
  */
-public record CacheListPayload(List<String> entries) implements CustomPacketPayload {
+public record CacheListPayload(List<String> entries) {
 
-    public static final Type<CacheListPayload> TYPE =
-        new Type<>(ResourceLocation.fromNamespaceAndPath(CRNDisplayNextMod.MOD_ID, "cache_list"));
+    public static void toBytes(CacheListPayload p, FriendlyByteBuf buf) {
+        buf.writeInt(p.entries().size());
+        for (String s : p.entries()) buf.writeUtf(s, 32767);
+    }
 
-    public static final StreamCodec<ByteBuf, CacheListPayload> CODEC =
-        StreamCodec.composite(
-            ByteBufCodecs.STRING_UTF8.apply(ByteBufCodecs.list()),
-            CacheListPayload::entries,
-            CacheListPayload::new
-        );
+    public static CacheListPayload read(FriendlyByteBuf buf) {
+        int n = buf.readInt();
+        List<String> list = new ArrayList<>(n);
+        for (int i = 0; i < n; i++) list.add(buf.readUtf(32767));
+        return new CacheListPayload(list);
+    }
 
-    @Override public Type<? extends CustomPacketPayload> type() { return TYPE; }
-
-    public static void handle(CacheListPayload p, IPayloadContext ctx) {
-        ctx.enqueueWork(() -> {
-            com.hybrizat.crndisplaynext.client.screen.GraphicsImageScreen.onCacheData(p.entries());
-        });
+    public static void handle(CacheListPayload p, Supplier<NetworkEvent.Context> ctxSupplier) {
+        ctxSupplier.get().enqueueWork(() -> GraphicsImageScreen.onCacheData(p.entries()));
     }
 }

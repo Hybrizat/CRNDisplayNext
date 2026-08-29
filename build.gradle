@@ -2,7 +2,7 @@ plugins {
     id 'java-library'
     id 'eclipse'
     id 'idea'
-    id 'net.neoforged.moddev' version '2.0.141'
+    id 'net.neoforged.moddev.legacyforge' version '2.0.141'
 }
 
 version = "${mod_version}"
@@ -12,13 +12,12 @@ repositories {
     mavenCentral()
     mavenLocal()
 
-    //Modrinth 仓库 (官方推荐写法)
+    // Modrinth 仓库 (官方推荐写法)
     exclusiveContent {
         forRepository {
             maven {
                 name = "Modrinth"
                 url = "https://api.modrinth.com/maven"
-
             }
         }
         filter {
@@ -37,13 +36,25 @@ java {
     withSourcesJar()
 }
 
-neoForge {
-    version = project.neo_version
+// Mixin 配置 (1.20.1 / Forge 47 需要 refmap)
+mixin {
+    add(sourceSets.main, "crndisplaynext.refmap.json")
+    config "crndisplaynext.mixins.json"
+}
 
-    parchment {
-        // Optional: better parameter names in IDE
-        // mappingsVersion = "2024.11.17"
-        // minecraftVersion = "1.21.1"
+legacyForge {
+    version = project.minecraft_version + '-' + project.forge_version
+
+    runs {
+        client {
+            client()
+            systemProperty 'forge.enabledGameTestNamespaces', mod_id
+        }
+        server {
+            server()
+            programArgument '--nogui'
+            systemProperty 'forge.enabledGameTestNamespaces', mod_id
+        }
     }
 
     mods {
@@ -51,39 +62,30 @@ neoForge {
             sourceSet(sourceSets.main)
         }
     }
-
-    runs {
-        client {
-            client()
-            systemProperty 'neoforge.enabledGameTestNamespaces', mod_id
-        }
-        server {
-            server()
-            programArgument '--nogui'
-            systemProperty 'neoforge.enabledGameTestNamespaces', mod_id
-        }
-    }
 }
 
 dependencies {
-    // ==========================================
-    // 彻底告别本地 libs，全部采用远程强类型 Maven 拉取！
-    // ==========================================
+    // Mixin annotation processor -> generates crndisplaynext.refmap.json
+    annotationProcessor 'org.spongepowered:mixin:0.8.5:processor'
 
-    // --- Ponder ---
-    compileOnly "net.createmod.ponder:ponder-neoforge:1.0.81+mc1.21.1"
-    runtimeOnly "net.createmod.ponder:ponder-neoforge:1.0.81+mc1.21.1"
+    // 1.20.1 / Forge 47 依赖矩阵 (全部远程 Maven 拉取)
 
-    //CRN 和 DragonLib
-    compileOnly "maven.modrinth:create-railways-navigator:1.21.1-beta-0.9.1-C6"
-    runtimeOnly "maven.modrinth:create-railways-navigator:1.21.1-beta-0.9.1-C6"
-    compileOnly "maven.modrinth:dragonlib:M6CMBAur"
-    runtimeOnly "maven.modrinth:dragonlib:M6CMBAur"
-    compileOnly "maven.modrinth:create:mc1.21.1-6.0.9"
-    runtimeOnly "maven.modrinth:create:mc1.21.1-6.0.9"
-
+    // CRN / DragonLib / Create (1.20.1)
+    // CRN / DragonLib: Modrinth Maven 对 1.20.1 提供的变体不可靠（曾拉到 Fabric 版），
+    // 改用本地 mavenLocal 中确认的 Forge 版 jar（com.local 组，源文件在 libs/）
+    modCompileOnly "com.local:create-railways-navigator:${crn_version}"
+    modRuntimeOnly "com.local:create-railways-navigator:${crn_version}"
+    modCompileOnly "com.local:dragonlib:${dragonlib_version}"
+    modRuntimeOnly "com.local:dragonlib:${dragonlib_version}"
+    // Create 1.20.1 运行时依赖 Ponder / Flywheel（Forge 1.20.1 变体）
+    modCompileOnly "net.createmod.ponder:Ponder-Forge-1.20.1:${ponder_version}"
+    modRuntimeOnly "net.createmod.ponder:Ponder-Forge-1.20.1:${ponder_version}"
+    modCompileOnly "dev.engine-room.flywheel:flywheel-forge-1.20.1:${flywheel_version}"
+    modRuntimeOnly "dev.engine-room.flywheel:flywheel-forge-1.20.1:${flywheel_version}"
+    modCompileOnly "maven.modrinth:create:mc1.20.1-${create_version}"
+    modRuntimeOnly "maven.modrinth:create:mc1.20.1-${create_version}"
 }
-// Mixin configuration
+
 configurations.configureEach {
     resolutionStrategy.force "net.sf.jopt-simple:jopt-simple:5.0.4"
 }
@@ -92,8 +94,9 @@ processResources {
     var replaceProperties = [
             minecraft_version      : minecraft_version,
             minecraft_version_range: minecraft_version_range,
-            neo_version            : neo_version,
-            neo_version_range      : neo_version_range,
+            forge_version          : forge_version,
+            forge_version_range    : forge_version_range,
+            loader_version_range   : loader_version_range,
             mod_id                 : mod_id,
             mod_name               : mod_name,
             mod_version            : mod_version,
@@ -102,7 +105,7 @@ processResources {
             java_version           : java_version,
     ]
     inputs.properties replaceProperties
-    filesMatching(['META-INF/neoforge.mods.toml']) {
+    filesMatching(['META-INF/mods.toml']) {
         expand replaceProperties
     }
 }
@@ -116,6 +119,7 @@ tasks.named('jar', Jar).configure {
                 'Implementation-Title'  : mod_name,
                 'Implementation-Version': mod_version,
                 'Implementation-Vendor' : mod_authors,
+                'MixinConfigs'        : 'crndisplaynext.mixins.json',
         ])
     }
 }

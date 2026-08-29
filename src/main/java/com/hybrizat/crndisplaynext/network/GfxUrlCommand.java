@@ -9,15 +9,15 @@ import de.mrjulsen.crn.block.blockentity.AdvancedDisplayBlockEntity;
 import net.minecraft.commands.Commands;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.phys.BlockHitResult;
-import net.neoforged.bus.api.SubscribeEvent;
-import net.neoforged.fml.common.EventBusSubscriber;
-import net.neoforged.neoforge.event.RegisterCommandsEvent;
+import net.minecraftforge.eventbus.api.SubscribeEvent;
+import net.minecraftforge.fml.common.Mod;
+import net.minecraftforge.event.RegisterCommandsEvent;
 
 /**
  * Server-side command: /gfxurl &lt;url&gt; — quick set image URL on the targeted
  * display block. No client-only references (safe for dedicated servers).
  */
-@EventBusSubscriber(modid = CRNDisplayNextMod.MOD_ID)
+@Mod.EventBusSubscriber(modid = CRNDisplayNextMod.MOD_ID)
 public class GfxUrlCommand {
 
     @SubscribeEvent

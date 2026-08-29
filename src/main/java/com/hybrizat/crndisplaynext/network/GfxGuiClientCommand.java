@@ -8,17 +8,17 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.commands.Commands;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.phys.BlockHitResult;
-import net.neoforged.bus.api.SubscribeEvent;
-import net.neoforged.fml.common.EventBusSubscriber;
-import net.neoforged.neoforge.client.event.RegisterClientCommandsEvent;
-import net.neoforged.api.distmarker.Dist;
+import net.minecraftforge.eventbus.api.SubscribeEvent;
+import net.minecraftforge.fml.common.Mod;
+import net.minecraftforge.client.event.RegisterClientCommandsEvent;
+import net.minecraftforge.api.distmarker.Dist;
 
 /**
  * Client-only command: /gfxgui — opens the image selection GUI.
  * Registered only on the client (dist = Dist.CLIENT) because it references
  * client-exclusive classes (Minecraft, GraphicsImageScreen).
  */
-@EventBusSubscriber(modid = CRNDisplayNextMod.MOD_ID, value = Dist.CLIENT)
+@Mod.EventBusSubscriber(modid = CRNDisplayNextMod.MOD_ID, value = Dist.CLIENT)
 public class GfxGuiClientCommand {
 
     @SubscribeEvent
