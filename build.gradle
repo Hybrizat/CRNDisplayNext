@@ -163,6 +163,11 @@ tasks.matching { it.name == "test" || it.name.startsWith("run") }.configureEach 
     dependsOn tasks.named("installModrinthDeps")
 }
 
+// ── Dual-loader note ─────────────────────────────────────────────────
+// We build against the common Forge 47 API. NeoForge 1.20.1
+// (net.neoforged:forge 1.20.1-47.1.x) is a continuation of the same
+// Forge 47 codebase and still registers as modId "forge", so the single
+// produced jar works on BOTH Forge and NeoForge for 1.20.1 — same as CRN.
 legacyForge {
     version = project.minecraft_version + '-' + project.forge_version
 

@@ -17,6 +17,8 @@ authors = "${mod_authors}"
 displayURL = "https://github.com/hybrizat/crndisplaynext"
 
 [[dependencies.crndisplaynext]]
+# Loader dependency. NeoForge 1.20.1 registers itself as modId "forge" as well,
+# so this single jar loads on both Forge and NeoForge (1.20.1 shares the Forge 47 API).
 modId = "forge"
 type = "required"
 versionRange = "${forge_version_range}"

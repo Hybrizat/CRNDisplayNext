@@ -17,6 +17,11 @@ Create: Railways Navigator Display Native Extended 是 [Create: Railways Navigat
 
 ---
 
+## 加载器支持 (Loader Support)
+
+本模组基于 **Forge 47** API 构建。由于 **NeoForge 的 1.20.1** 延续的是同一套 Forge 47 代码库（且在 mod 元数据中仍注册为 orge），因此**同一个 jar 文件可同时用于 Forge 与 NeoForge 的 1.20.1**，无需为两种加载器分别发布（与 CRN 本体的做法一致）。
+
+---
 ## 模组依赖
 - Create 6.0.9
 - Create: Railways Navigator alpha 0.9.1 C6

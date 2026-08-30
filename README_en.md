@@ -15,6 +15,11 @@ Create: Train Navigator Display Native Extended is an add-on mod for [Create: Tr
 
 ---
 
+## Loader Support
+
+This mod is built against the **Forge 47** API. Because **NeoForge 1.20.1** continues the same Forge 47 codebase (and still registers itself as the orge mod), **the same single jar works on both Forge and NeoForge for 1.20.1** — no separate per-loader build is needed (same approach as CRN itself).
+
+---
 ## Mod Dependencies
 - Create 6.0.9
 - Create: Railways Navigator alpha 0.9.1 C6
