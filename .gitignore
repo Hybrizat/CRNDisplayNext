@@ -34,6 +34,8 @@ bin/
 .vscode/
 
 # ── Local mod dependencies ────────────────
+# local-maven/ holds pinned Modrinth Forge builds downloaded by the installModrinthDeps task.
+local-maven/
 # libs/ contains the CRN, Create, Ponder JARs needed for compilation.
 # These are copyrighted third-party files and must NOT be committed.
 # Other developers must obtain them from their own game installations.

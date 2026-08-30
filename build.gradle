@@ -1,3 +1,5 @@
+import groovy.json.JsonSlurper
+
 plugins {
     id 'java-library'
     id 'eclipse'
@@ -8,9 +10,52 @@ plugins {
 version = "${mod_version}"
 group = "${mod_group_id}"
 
+// ────────────────────────────────────────────────────────────────────────
+// Pinned Modrinth dependencies (CRN / DragonLib) — exact Forge builds
+//
+// The Modrinth Maven endpoint (https://api.modrinth.com/maven) resolves by
+// version number and serves the first file of that version, which for
+// multi-loader releases is NOT necessarily the Forge build (we previously
+// pulled the wrong variant this way). To pin the exact artifact, the
+// installModrinthDeps task below fetches the file by Modrinth *version ID*
+// via the REST API and installs it into the project-local Maven repository
+// `local-maven/`.
+//
+// Pinned version pages:
+//   CRN:       https://modrinth.com/mod/create-railways-navigator/version/r5q4MIYy
+//   DragonLib: https://modrinth.com/mod/dragonlib/version/RWduTzyi
+//
+// To update: change the versionId here AND the version in gradle.properties.
+// ────────────────────────────────────────────────────────────────────────
+def modrinthPins = [
+        [project: "create-railways-navigator", versionId: "r5q4MIYy",
+         group: "com.local", artifact: "create-railways-navigator", version: crn_version],
+        [project: "dragonlib", versionId: "RWduTzyi",
+         group: "com.local", artifact: "dragonlib", version: dragonlib_version],
+]
+def localMavenDir = new File(projectDir, "local-maven")
+def modrinthPinArtifacts = modrinthPins.collect { pin ->
+    def dir = new File(localMavenDir, pin.group.replace('.', '/') + '/' + pin.artifact + '/' + pin.version)
+    [dir: dir,
+     jar: new File(dir, pin.artifact + '-' + pin.version + '.jar'),
+     pom: new File(dir, pin.artifact + '-' + pin.version + '.pom')]
+}
+
 repositories {
     mavenCentral()
-    mavenLocal()
+
+    // CRN / DragonLib: local-maven/ (populated by the installModrinthDeps task)
+    exclusiveContent {
+        forRepository {
+            maven {
+                name = "LocalModrinth"
+                url = localMavenDir
+            }
+        }
+        filter {
+            includeGroup "com.local"
+        }
+    }
 
     // Modrinth 仓库 (官方推荐写法)
     exclusiveContent {
@@ -27,6 +72,7 @@ repositories {
     maven { url = "https://raw.githubusercontent.com/Fuzss/modresources/main/maven/" }
     maven { url = "https://maven.createmod.net" }
 }
+
 base {
     archivesName = mod_id
 }
@@ -40,6 +86,81 @@ java {
 mixin {
     add(sourceSets.main, "crndisplaynext.refmap.json")
     config "crndisplaynext.mixins.json"
+}
+
+// ── installModrinthDeps: 下载锁定的 Modrinth Forge 构建到 local-maven/ ──
+def openWithTimeout = { URL u ->
+    def conn = u.openConnection()
+    conn.connectTimeout = 30000
+    conn.readTimeout = 300000
+    return conn
+}
+
+def installOnePin = { pin, out ->
+    def metaUrl = "https://api.modrinth.com/v2/project/${pin.project}/version/${pin.versionId}"
+    def metaText
+    openWithTimeout(new URL(metaUrl)).inputStream.withCloseable { ins ->
+        metaText = ins.getText("UTF-8")
+    }
+    def meta = new JsonSlurper().parseText(metaText)
+    if (meta.version_number != pin.version) {
+        throw new GradleException("Modrinth ${pin.project}@${pin.versionId} version mismatch: expected ${pin.version}, got ${meta.version_number}")
+    }
+    def file = (meta.files ?: []).find { it.primary }
+    if (file == null) {
+        throw new GradleException("Modrinth ${pin.project}@${pin.versionId} has no primary file")
+    }
+    def jar = out.jar
+    if (jar.exists() && jar.length() == file.size) {
+        logger.lifecycle("[modrinth-pin] ${pin.group}:${pin.artifact}:${pin.version} already up to date")
+    } else {
+        logger.lifecycle("[modrinth-pin] downloading ${pin.group}:${pin.artifact}:${pin.version} (${file.size} bytes)")
+        jar.parentFile.mkdirs()
+        def tmp = new File(jar.parentFile, jar.name + '.part')
+        def dlIns = openWithTimeout(new URL(file.url)).inputStream
+        try {
+            java.nio.file.Files.copy(dlIns, tmp.toPath(), java.nio.file.StandardCopyOption.REPLACE_EXISTING)
+        } finally {
+            dlIns.close()
+        }
+        if (tmp.length() != file.size) {
+            tmp.delete()
+            throw new GradleException("Size mismatch downloading ${pin.artifact}: expected ${file.size}, got ${tmp.length()}")
+        }
+        if (jar.exists()) { jar.delete() }
+        tmp.renameTo(jar)
+    }
+    if (!out.pom.exists()) {
+        out.pom.parentFile.mkdirs()
+        out.pom.text = """<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0">
+  <modelVersion>4.0.0</modelVersion>
+  <groupId>${pin.group}</groupId>
+  <artifactId>${pin.artifact}</artifactId>
+  <version>${pin.version}</version>
+  <packaging>jar</packaging>
+</project>
+"""
+    }
+}
+
+tasks.register("installModrinthDeps") {
+    group = "modding"
+    description = "Fetches the pinned Modrinth Forge builds (by version ID) into local-maven/."
+    outputs.files(modrinthPinArtifacts.collectMany { [it.jar, it.pom] })
+    doLast {
+        modrinthPins.eachWithIndex { pin, i ->
+            installOnePin(pin, modrinthPinArtifacts[i])
+        }
+    }
+}
+
+// Ensure the pinned jars exist before anything resolves them
+tasks.withType(JavaCompile).configureEach {
+    dependsOn tasks.named("installModrinthDeps")
+}
+tasks.matching { it.name == "test" || it.name.startsWith("run") }.configureEach {
+    dependsOn tasks.named("installModrinthDeps")
 }
 
 legacyForge {
@@ -68,11 +189,10 @@ dependencies {
     // Mixin annotation processor -> generates crndisplaynext.refmap.json
     annotationProcessor 'org.spongepowered:mixin:0.8.5:processor'
 
-    // 1.20.1 / Forge 47 依赖矩阵 (全部远程 Maven 拉取)
+    // 1.20.1 / Forge 47 依赖矩阵
 
-    // CRN / DragonLib / Create (1.20.1)
-    // CRN / DragonLib: Modrinth Maven 对 1.20.1 提供的变体不可靠（曾拉到 Fabric 版），
-    // 改用本地 mavenLocal 中确认的 Forge 版 jar（com.local 组，源文件在 libs/）
+    // CRN / DragonLib (1.20.1 Forge, 按 Modrinth version ID 精确锁定)
+    // 来源: local-maven/ (由 installModrinthDeps 任务下载, 见文件顶部说明)
     modCompileOnly "com.local:create-railways-navigator:${crn_version}"
     modRuntimeOnly "com.local:create-railways-navigator:${crn_version}"
     modCompileOnly "com.local:dragonlib:${dragonlib_version}"
