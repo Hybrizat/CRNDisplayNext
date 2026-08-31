@@ -68,3 +68,5 @@ desktop.ini
 
 
 .run/
+# scratch dir (local probes/extracts)
+.tmp/
