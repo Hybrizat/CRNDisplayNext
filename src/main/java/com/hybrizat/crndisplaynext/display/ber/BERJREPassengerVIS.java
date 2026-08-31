@@ -84,7 +84,7 @@ public class BERJREPassengerVIS implements AbstractAdvancedDisplayRenderer<JREVI
         entry = H.get(key);
         if (entry == null || !entry.holder().isReady()) return;
         RenderUtils.renderTexture(entry.holder().getId(), g,
-            new Vector3f(2, 2, 0.02f), cw - 4, ch - 4,
+            new Vector3f(2, 2, 0.5f), cw - 4, ch - 4, // z-offset: push VIS texture ~0.5px in front of panel grid to avoid z-fighting
             0, 0, 1, 1,
             be.getBlockState().getValue(HorizontalDirectionalBlock.FACING),
             DLColor.WHITE, false);
