@@ -7,13 +7,24 @@ import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraftforge.event.TickEvent;
 
 /**
- * Periodically releases dynamic-texture holders whose backing block entity has been
- * removed or switched to another display type, so GL resources are not leaked.
+ * Periodically reclaims dynamic-texture holders whose display has gone quiet
+ * (backing block entity unloaded/removed, or contraption dismantled), so GL
+ * resources are not leaked. Liveness is judged by renderer activity (see the
+ * BER renderers), not by position lookups: carriage-mounted displays never
+ * live in the level's block entity map, so position-based checks would wrongly
+ * reap them.
  * Registered on the Forge (Minecraft) event bus during client setup only.
  */
 public final class TextureHolderSweeper {
 
-    private static final int SWEEP_INTERVAL_TICKS = 10;
+    /**
+     * Monotonic client-tick counter, advanced once per level tick (main thread
+     * only). Used by the BER renderers as the liveness clock for activity-based
+     * holder reclamation (1.20.1's Minecraft class exposes no global tickCount).
+     */
+    public static int clientTicks;
+
+    private static final int CLEANUP_INTERVAL_TICKS = 40;
     private static int tickCounter;
 
     private TextureHolderSweeper() {}
@@ -21,12 +32,13 @@ public final class TextureHolderSweeper {
     public static void onLevelTick(TickEvent.LevelTickEvent event) {
         if (event.phase != TickEvent.Phase.END) return;
         if (!(event.level instanceof ClientLevel)) return;
-        if (++tickCounter % SWEEP_INTERVAL_TICKS != 0) return;
+        clientTicks++;
+        if (++tickCounter % CLEANUP_INTERVAL_TICKS != 0) return;
         try {
-            BERJREGraphics.sweep();
-            BERJREPassengerVIS.sweep();
+            BERJREGraphics.cleanup();
+            BERJREPassengerVIS.cleanup();
         } catch (Exception e) {
-            CRNDisplayNextMod.LOGGER.warn("[GfxSweep] texture holder sweep failed", e);
+            CRNDisplayNextMod.LOGGER.warn("[GfxCleanup] texture holder cleanup failed", e);
         }
     }
 }

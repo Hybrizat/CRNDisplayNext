@@ -3,6 +3,7 @@ package com.hybrizat.crndisplaynext.display.ber;
 import com.hybrizat.crndisplaynext.CRNDisplayNextMod;
 import com.hybrizat.crndisplaynext.api.IBasicTrainDisplayDataExt;
 import com.hybrizat.crndisplaynext.client.DynamicTextureHolder;
+import com.hybrizat.crndisplaynext.client.TextureHolderSweeper;
 import com.hybrizat.crndisplaynext.client.FontLoader;
 import com.hybrizat.crndisplaynext.display.renderer.UpperLCDRenderer;
 import com.hybrizat.crndisplaynext.display.renderer.LayoutConfig;
@@ -58,7 +59,25 @@ public class BERJREPassengerVIS implements AbstractAdvancedDisplayRenderer<JREVI
     private static final int FONT_STOPS = 22, FONT_TIME = 14;
 
     enum Page { FULL_ROUTE, FIVE_STATION }
-    private record Entry(AdvancedDisplayBlockEntity be, DynamicTextureHolder holder) {}
+    /**
+     * A holder plus the last client tick in which its display was confirmed alive
+     * (CRN called tick/render/update for this exact block entity instance).
+     */
+    private static final class Entry {
+        final AdvancedDisplayBlockEntity be;
+        final DynamicTextureHolder holder;
+        int lastActive;
+
+        Entry(AdvancedDisplayBlockEntity be, DynamicTextureHolder holder) {
+            this.be = be;
+            this.holder = holder;
+            this.lastActive = TextureHolderSweeper.clientTicks;
+        }
+
+        void touch() { lastActive = TextureHolderSweeper.clientTicks; }
+    }
+    /** A display is considered dead after this many ticks without renderer activity. */
+    static final int STALE_AFTER_TICKS = 200;
     private static final Map<Long, Entry> H = new HashMap<>();
     private Page page = Page.FULL_ROUTE;
     private long pageStart;
@@ -67,6 +86,8 @@ public class BERJREPassengerVIS implements AbstractAdvancedDisplayRenderer<JREVI
     @Override public void tick(Level lv, BlockPos pos, BlockState st,
                                 AdvancedDisplayBlockEntity be, AdvancedDisplayRenderInstance p) {
         if (!be.isController()) return;
+        Entry e = H.get(pos.asLong());
+        if (e != null && e.be == be) e.touch();
         long t = ModUtils.getTransformedWorldTime();
         if (t - pageStart >= getDisplaySettings(be).getPageIntervalSecs() * 20L) {
             page = (page == Page.FULL_ROUTE) ? Page.FIVE_STATION : Page.FULL_ROUTE;
@@ -80,10 +101,11 @@ public class BERJREPassengerVIS implements AbstractAdvancedDisplayRenderer<JREVI
         if (!be.isController()) return;
         long key = be.getBlockPos().asLong();
         Entry entry = H.get(key);
-        if (entry != null && entry.be() != be) release(key);
+        if (entry != null && entry.be != be) release(key);
         entry = H.get(key);
-        if (entry == null || !entry.holder().isReady()) return;
-        RenderUtils.renderTexture(entry.holder().getId(), g,
+        if (entry == null || !entry.holder.isReady()) return;
+        entry.touch();
+        RenderUtils.renderTexture(entry.holder.getId(), g,
             new Vector3f(2, 2, 0.5f), cw - 4, ch - 4, // z-offset: push VIS texture ~0.5px in front of panel grid to avoid z-fighting
             0, 0, 1, 1,
             be.getBlockState().getValue(HorizontalDirectionalBlock.FACING),
@@ -99,13 +121,14 @@ public class BERJREPassengerVIS implements AbstractAdvancedDisplayRenderer<JREVI
         ch = be.getYSizeScaled() * 16;
         long k = be.getBlockPos().asLong();
         Entry entry = H.get(k);
-        if (entry != null && entry.be() != be) release(k);
+        if (entry != null && entry.be != be) release(k);
         entry = H.get(k);
         if (entry == null) {
             entry = new Entry(be, new DynamicTextureHolder(SW, SH));
             H.put(k, entry);
         }
-        var holder = entry.holder();
+        entry.touch();
+        var holder = entry.holder;
         holder.resize(SW, SH);
         BufferedImage img = new BufferedImage(SW, SH, BufferedImage.TYPE_INT_RGB);
         Graphics2D g2 = img.createGraphics();
@@ -410,21 +433,20 @@ public class BERJREPassengerVIS implements AbstractAdvancedDisplayRenderer<JREVI
             g.drawString(ch, cx - cw/2, top + asc + j * font.getSize());
         }
     }
-    /** Release holders whose block entity is gone or no longer a passenger-VIS display. */
-    public static void sweep() {
-        var level = Minecraft.getInstance().level;
-        if (level == null) return;
+    /**
+     * Activity-based reclamation: release a holder only after its display has
+     * been quiet for STALE_AFTER_TICKS (block unloaded, removed, or the
+     * carriage dismantled). Live displays - including carriage-mounted VIS,
+     * whose block entity never lives in the level's BE map - keep getting
+     * touched by CRN's renderer calls, so they are never reaped.
+     */
+    public static void cleanup() {
+        int now = TextureHolderSweeper.clientTicks;
         for (long key : new ArrayList<>(H.keySet())) {
             Entry e = H.get(key);
-            if (e == null) continue;
-            var be = e.be();
-            if (level.getBlockEntity(be.getBlockPos()) != be
-                    || !be.isController()
-                    || !(be.getSettings() instanceof JREVISSettings)) {
-                release(key);
-            }
+            if (e != null && now - e.lastActive >= STALE_AFTER_TICKS) release(key);
         }
     }
 
-    public static void release(long key) { var e = H.remove(key); if (e != null) e.holder().close(); }
+    public static void release(long key) { var e = H.remove(key); if (e != null) e.holder.close(); }
 }
