@@ -5,7 +5,6 @@ import com.hybrizat.crndisplaynext.api.IAdvancedDisplayBEExt;
 import com.hybrizat.crndisplaynext.api.IHideTechnicalStops;
 import de.mrjulsen.crn.block.blockentity.AdvancedDisplayBlockEntity;
 import net.minecraft.core.BlockPos;
-import net.minecraft.core.HolderLookup;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import org.spongepowered.asm.mixin.Mixin;
@@ -43,9 +42,9 @@ public abstract class MixinAdvancedDisplayBE implements IAdvancedDisplayBEExt {
     }
 
     // ── NBT persistence ────────────────────────────────────────────────────
+    // 1.20.1 target signatures: write(CompoundTag, boolean) / read(CompoundTag, boolean)
     @Inject(method = "write", at = @At("TAIL"), remap = false)
     private void crndisplaynext$onWrite(CompoundTag tag,
-                                       HolderLookup.Provider provider,
                                        boolean clientPacket,
                                        CallbackInfo ci) {
         tag.putBoolean(NBT_KEY, crndisplaynext$hideTechnicalStops);
@@ -53,7 +52,6 @@ public abstract class MixinAdvancedDisplayBE implements IAdvancedDisplayBEExt {
 
     @Inject(method = "read", at = @At("TAIL"), remap = false)
     private void crndisplaynext$onRead(CompoundTag tag,
-                                      HolderLookup.Provider provider,
                                       boolean clientPacket,
                                       CallbackInfo ci) {
         crndisplaynext$hideTechnicalStops = tag.getBoolean(NBT_KEY);
