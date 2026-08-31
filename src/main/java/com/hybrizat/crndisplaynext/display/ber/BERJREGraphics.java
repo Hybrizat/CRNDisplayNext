@@ -2,6 +2,7 @@ package com.hybrizat.crndisplaynext.display.ber;
 
 import com.hybrizat.crndisplaynext.CRNDisplayNextMod;
 import com.hybrizat.crndisplaynext.client.DynamicTextureHolder;
+import com.hybrizat.crndisplaynext.client.TextureHolderSweeper;
 import com.hybrizat.crndisplaynext.client.ImageReassembler;
 import com.hybrizat.crndisplaynext.display.settings.GraphicsDisplaySettings;
 import com.hybrizat.crndisplaynext.network.FetchImagePayload;
@@ -13,7 +14,6 @@ import de.mrjulsen.crn.client.ber.variants.AbstractAdvancedDisplayRenderer;
 import de.mrjulsen.mcdragonlib.client.ber.BERGraphics;
 import de.mrjulsen.mcdragonlib.client.util.RenderUtils;
 import de.mrjulsen.mcdragonlib.util.DLColor;
-import net.minecraft.client.Minecraft;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.HorizontalDirectionalBlock;
@@ -35,7 +35,25 @@ import java.util.concurrent.ConcurrentHashMap;
 public class BERJREGraphics implements AbstractAdvancedDisplayRenderer<GraphicsDisplaySettings> {
 
     private static final DLColor BG = DLColor.fromInt(0xFF1a1a2e);
-    private record Entry(AdvancedDisplayBlockEntity be, DynamicTextureHolder holder) {}
+    /**
+     * A holder plus the last client tick in which its display was confirmed alive
+     * (CRN called tick/render/update for this exact block entity instance).
+     */
+    private static final class Entry {
+        final AdvancedDisplayBlockEntity be;
+        final DynamicTextureHolder holder;
+        int lastActive;
+
+        Entry(AdvancedDisplayBlockEntity be, DynamicTextureHolder holder) {
+            this.be = be;
+            this.holder = holder;
+            this.lastActive = TextureHolderSweeper.clientTicks;
+        }
+
+        void touch() { lastActive = TextureHolderSweeper.clientTicks; }
+    }
+    /** A display is considered dead after this many ticks without renderer activity. */
+    static final int STALE_AFTER_TICKS = 200;
     private static final Map<Long, Entry> holders = new HashMap<>();
     /** key → request start time (ms). Pending server fetch requests. */
     private static final Map<Long, Long> pendingUrls = new ConcurrentHashMap<>();
@@ -77,13 +95,14 @@ public class BERJREGraphics implements AbstractAdvancedDisplayRenderer<GraphicsD
         int texH = be.getYSizeScaled() * TEX;
 
         Entry entry = holders.get(key);
-        if (entry != null && entry.be() != be) release(key);
+        if (entry != null && entry.be != be) release(key);
         entry = holders.get(key);
         if (entry == null && texW > 0 && texH > 0) {
             entry = new Entry(be, new DynamicTextureHolder(texW, texH));
             holders.put(key, entry);
         }
-        DynamicTextureHolder h = entry != null ? entry.holder() : null;
+        if (entry != null) entry.touch();
+        DynamicTextureHolder h = entry != null ? entry.holder : null;
         if (h != null) {
             h.resize(texW, texH);
             if (!h.isReady()) {
@@ -139,7 +158,7 @@ public class BERJREGraphics implements AbstractAdvancedDisplayRenderer<GraphicsD
         pendingUrls.remove(key);
         Entry e = holders.get(key);
         if (e != null && data != null) {
-            e.holder().loadBytes(data);
+            e.holder.loadBytes(data);
         }
     }
 
@@ -148,27 +167,26 @@ public class BERJREGraphics implements AbstractAdvancedDisplayRenderer<GraphicsD
         pendingUrls.remove(key);
         failedUrls.remove(key);
         ImageReassembler.drop(key);
-        if (e != null) e.holder().close();
+        if (e != null) e.holder.close();
     }
 
-    /** Release holders whose block entity is gone or no longer a graphics display. */
-    public static void sweep() {
-        var level = Minecraft.getInstance().level;
-        if (level == null) return;
+    /**
+     * Activity-based reclamation: release a holder only after its display has
+     * been quiet for STALE_AFTER_TICKS (block unloaded, removed, or the
+     * carriage dismantled). Live displays keep getting touched from render();
+     * a re-created display re-requests its image from the server on the next
+     * render pass.
+     */
+    public static void cleanup() {
+        int now = TextureHolderSweeper.clientTicks;
         for (long key : new ArrayList<>(holders.keySet())) {
             Entry e = holders.get(key);
-            if (e == null) continue;
-            var be = e.be();
-            if (level.getBlockEntity(be.getBlockPos()) != be
-                    || !be.isController()
-                    || !(be.getSettings() instanceof GraphicsDisplaySettings)) {
-                release(key);
-            }
+            if (e != null && now - e.lastActive >= STALE_AFTER_TICKS) release(key);
         }
     }
 
     private static void closeAll() {
-        for (var e : holders.values()) e.holder().close();
+        for (var e : holders.values()) e.holder.close();
         holders.clear();
         pendingUrls.clear();
         failedUrls.clear();
