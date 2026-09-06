@@ -122,14 +122,15 @@ public abstract class AbstractJRERenderer<S extends AbstractJRESettings>
         oosLabel.preferredWidth.set((float)(totalWForOos - 6));
         oosLabel.horizontalScrollMode.set(BERLabel.EScrollMode.WHEN_NEEDED);
 
-        // Filter departures — mirrors BERPlatformSimple logic:
-        //   getRealTimeArrivalTime < now + LEAD_TIME  → train is upcoming or current
-        //   cancelled trains shown only until scheduledDeparture + LEAD_TIME
+        // Filter — mirrors CRN's default informative board (BERPlatformInformative):
+        // every train whose timetable includes this station and that will DEPART
+        // here (departure board → exclude section-terminus entries), cancelled
+        // trains only until scheduledDeparture + LEAD_TIME.
+        // Note: deliberately NO "departing soon" time window (BERPlatformSimple
+        // behavior) — the board lists all upcoming departures at this station.
         long now = ModUtils.getTransformedWorldTime();
         lastDepartures = be.getStops().stream()
             .filter(x -> !x.isNextSectionExcluded())
-            .filter(x -> x.getStationData().getRealTimeArrivalTime()
-                         < now + ModCommonConfig.DISPLAY_LEAD_TIME.get())
             .filter(x -> !x.getTrainData().isCancelled()
                 || now < x.getStationData().getScheduledDepartureTime()
                          + ModCommonConfig.DISPLAY_LEAD_TIME.get())

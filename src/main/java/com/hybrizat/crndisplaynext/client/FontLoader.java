@@ -40,6 +40,8 @@ public final class FontLoader {
     private static Font shingoMedium, shingoBold, shingoLight;
     // Bundled MPlus (priority 2)
     private static Font mplusMedium, mplusBold;
+    // Bundled Noto (CJK coverage - per-char fallback target)
+    private static Font notoBold, notoRegular;
 
     public static void init(File gameDir) {
         // 1. Bundled first (user files may override the map by name)
@@ -49,6 +51,8 @@ public final class FontLoader {
         }
         mplusMedium = find("m+ 2p medium", "mplus2p-medium", "m+ 2p");
         mplusBold = find("m+ 2p bold", "mplus2p-bold");
+        notoBold = FONTS.get("notosanscjksc-bold");
+        notoRegular = FONTS.get("notosanscjksc-regular");
         System.out.println("[FontLoader] registered: " + FONTS.keySet());
         System.out.println("[FontLoader] mplusMedium=" + (mplusMedium != null ? mplusMedium.getFontName() : "NULL")
             + " mplusBold=" + (mplusBold != null ? mplusBold.getFontName() : "NULL"));
@@ -120,6 +124,20 @@ public final class FontLoader {
     public static Font badge(float size) {
         Font base = get("NeueFrutigerWorld-Bold", "Frutiger");
         return derive(base, Font.BOLD, size);
+    }
+
+    /** Can this font render the character at all (no tofu)? */
+    public static boolean canDisplay(Font font, char c) { return font != null && font.canDisplay(c); }
+
+    /** Resolve a font that can display the given character: primary first, otherwise
+     *  the bundled Noto CJK face in a matching weight, re-derived at the primary size. */
+    public static Font resolveFor(Font primary, char c) {
+        if (primary == null) return null;
+        if (primary.canDisplay(c)) return primary;
+        Font base = (primary.getStyle() == Font.BOLD) ? notoBold : notoRegular;
+        if (base == null) base = notoBold != null ? notoBold : notoRegular;
+        if (base == null) return primary;
+        return derive(base, Font.PLAIN, primary.getSize2D());
     }
 
     private static Font find(String... substrings) {

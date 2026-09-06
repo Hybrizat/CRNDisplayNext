@@ -40,13 +40,18 @@ public class BERJREGraphics implements AbstractAdvancedDisplayRenderer<GraphicsD
      * (CRN called tick/render/update for this exact block entity instance).
      */
     private static final class Entry {
-        final AdvancedDisplayBlockEntity be;
+        /** Block entity this holder is bound to. Re-bound (not replaced) when
+         *  the BE is recreated by a chunk reload, so the texture survives. */
+        AdvancedDisplayBlockEntity be;
         final DynamicTextureHolder holder;
+        /** URL currently requested/loaded for this holder. */
+        volatile String url;
         int lastActive;
 
-        Entry(AdvancedDisplayBlockEntity be, DynamicTextureHolder holder) {
+        Entry(AdvancedDisplayBlockEntity be, DynamicTextureHolder holder, String url) {
             this.be = be;
             this.holder = holder;
+            this.url = url;
             this.lastActive = TextureHolderSweeper.clientTicks;
         }
 
@@ -54,7 +59,7 @@ public class BERJREGraphics implements AbstractAdvancedDisplayRenderer<GraphicsD
     }
     /** A display is considered dead after this many ticks without renderer activity. */
     static final int STALE_AFTER_TICKS = 200;
-    private static final Map<Long, Entry> holders = new HashMap<>();
+    private static final Map<Long, Entry> holders = new ConcurrentHashMap<>();
     /** key → request start time (ms). Pending server fetch requests. */
     private static final Map<Long, Long> pendingUrls = new ConcurrentHashMap<>();
     /** key → URL the server failed to deliver; do not re-request until it changes. */
@@ -95,25 +100,45 @@ public class BERJREGraphics implements AbstractAdvancedDisplayRenderer<GraphicsD
         int texH = be.getYSizeScaled() * TEX;
 
         Entry entry = holders.get(key);
-        if (entry != null && entry.be != be) release(key);
+        if (entry != null && entry.be != be) {
+            // Block entity was recreated (chunk unload/reload): keep the
+            // existing texture and just re-bind it. Releasing here forced a
+            // full re-download (uplink spike) and a blank frame (flicker)
+            // every time the player crossed the chunk-load boundary.
+            if (entry.url != null && !entry.url.equals(url)) {
+                release(key); // configured image actually changed → start fresh
+            } else {
+                entry.be = be;
+            }
+        }
         entry = holders.get(key);
         if (entry == null && texW > 0 && texH > 0) {
-            entry = new Entry(be, new DynamicTextureHolder(texW, texH));
+            entry = new Entry(be, new DynamicTextureHolder(texW, texH), null);
             holders.put(key, entry);
         }
         if (entry != null) entry.touch();
         DynamicTextureHolder h = entry != null ? entry.holder : null;
         if (h != null) {
             h.resize(texW, texH);
+            if (entry.url != null && !entry.url.equals(url)) {
+                // Configured image changed while the holder was alive → drop
+                // the old request state and fetch the new one (the old image
+                // stays visible until the new upload completes).
+                pendingUrls.remove(key);
+                failedUrls.remove(key);
+                ImageReassembler.drop(key);
+                entry.url = null;
+            }
             if (!h.isReady()) {
                 if (!ImageUrlPolicy.isPlausibleImageUrl(url)) {
-                    logThrottled("[Gfx] not an image URL (need http(s) + image extension): " + url);
+                    logThrottled("[Gfx] not a valid image URL (need http(s) with host): " + url);
                 } else if (url.equals(failedUrls.get(key))) {
                     // Already failed for this URL; wait for the user to change it.
                 } else {
                     Long started = pendingUrls.putIfAbsent(key, System.currentTimeMillis());
                     if (started == null) {
                         // First request → ask the server (cache or download).
+                        entry.url = url;
                         CRNDisplayNextMod.LOGGER.info("[Gfx] requesting from server: {}", url);
                         FetchImagePayload.request(be.getBlockPos(), url);
                     } else if (System.currentTimeMillis() - started > FETCH_TIMEOUT_MS) {
@@ -125,6 +150,7 @@ public class BERJREGraphics implements AbstractAdvancedDisplayRenderer<GraphicsD
                 }
             }
             if (h.isReady()) {
+                pendingUrls.remove(key); // transfer finished → clear in-flight marker
                 RenderUtils.renderTexture(
                     h.getId(), graphics,
                     new Vector3f(M, M, 0.02f),
@@ -155,11 +181,21 @@ public class BERJREGraphics implements AbstractAdvancedDisplayRenderer<GraphicsD
     /** Called from ImageDataPayload handler (client) once a full image arrived. */
     public static void onImageData(BlockPos pos, byte[] data) {
         long key = pos.asLong();
-        pendingUrls.remove(key);
         Entry e = holders.get(key);
-        if (e != null && data != null) {
-            e.holder.loadBytes(data);
+        if (e == null || data == null) {
+            pendingUrls.remove(key); // delivered, but the holder is gone — drop the marker
+            return;
         }
+        // Keep the in-flight marker until the holder is ACTUALLY ready
+        // (decode + GL upload complete). Removing it early let every render
+        // frame during the decode gap re-request the whole image → request
+        // storm + uplink saturation + visible flicker.
+        e.holder.loadBytes(data,
+            () -> pendingUrls.remove(key), // success → ready to render
+            () -> {                        // undecodable → stop retrying this URL
+                pendingUrls.remove(key);
+                if (e.url != null) failedUrls.put(key, e.url);
+            });
     }
 
     public static void release(long key) {

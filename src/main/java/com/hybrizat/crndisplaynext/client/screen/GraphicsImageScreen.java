@@ -133,7 +133,7 @@ public class GraphicsImageScreen extends Screen {
             String u = urlInput.getValue().trim();
             if (u.isBlank()) return;
             if (!ImageUrlPolicy.isPlausibleImageUrl(u)) {
-                status = Component.literal("Not an image URL — use an http(s) link ending in .png/.jpg/.webp/...");
+                status = Component.literal("Not a valid image URL — use an http(s) link with a host");
                 return;
             }
             urlDraft = u;
@@ -147,7 +147,7 @@ public class GraphicsImageScreen extends Screen {
         String u = urlInput.getValue().trim();
         if (u.isBlank()) { status = Component.literal("URL empty"); return; }
         if (!ImageUrlPolicy.isPlausibleImageUrl(u)) {
-            status = Component.literal("Not an image URL — use an http(s) link ending in .png/.jpg/.webp/...");
+            status = Component.literal("Not a valid image URL — use an http(s) link with a host");
             return;
         }
         urlDraft = u;
@@ -276,7 +276,7 @@ public class GraphicsImageScreen extends Screen {
         if (!paths.isEmpty()) {
             urlDraft = "";
             if (urlInput != null) urlInput.setValue("");
-            status = Component.literal("Local files are not supported — paste an http(s) image URL");
+            status = Component.literal("Local files are not supported — paste an http(s) URL");
         }
     }
 }

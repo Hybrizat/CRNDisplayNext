@@ -43,7 +43,7 @@ public final class UpperLCDRenderer {
         int sx = sw * C.ribbonXFraction() / 100 - (int)sb.getWidth() - C.suffixRightOffset();
         int sy = uh - (int)sb.getHeight() - C.suffixBottomMargin();
         g.setColor(C.fgColor()); g.setFont(sufFont);
-        g.drawString(C.suffixText(), sx, sy + g.getFontMetrics(sufFont).getAscent());
+        drawFallback(g, C.suffixText(), sufFont, sx, sy + g.getFontMetrics(sufFont).getAscent());
         g.setClip(null);
 
         // Clock
@@ -51,7 +51,7 @@ public final class UpperLCDRenderer {
         g.setClip(cr.x(), cr.y(), cr.w(), cr.h());
         Font cf = Fonts.clock(C.clockFontSize());
         g.setFont(cf); g.setColor(C.fgColor());
-        g.drawString(m.clock, cr.x(), cr.y() + C.clockTextOffsetY() + g.getFontMetrics(cf).getAscent());
+        drawFallback(g, m.clock, cf, cr.x(), cr.y() + C.clockTextOffsetY() + g.getFontMetrics(cf).getAscent());
         g.setClip(null);
 
         // Prefix
@@ -60,7 +60,7 @@ public final class UpperLCDRenderer {
         g.setColor(C.bgColor()); g.fillRect(pr.x(), pr.y(), pr.w(), pr.h());
         Font pf = Fonts.medium(C.prefixFontSize());
         g.setFont(pf); g.setColor(C.fgColor());
-        g.drawString(m.prefix, pr.x(), pr.y() + C.prefixTextOffsetY() + pf.getSize());
+        drawFallback(g, m.prefix, pf, pr.x(), pr.y() + C.prefixTextOffsetY() + pf.getSize());
         g.setClip(null);
 
         // Station (bold)
@@ -91,9 +91,11 @@ public final class UpperLCDRenderer {
         if (text.isEmpty()) return;
         text = com.hybrizat.crndisplaynext.client.KanjiConverter.toDisplay(text, font);
         TextLayoutResult r = LAYOUT.layout(font, text, width);
-        g.setFont(font); g.setColor(color);
-        for (GlyphPlacement gp : r.placements())
+        g.setColor(color);
+        for (GlyphPlacement gp : r.placements()) {
+            g.setFont(Fonts.resolveFor(gp.ch(), font));
             g.drawString(String.valueOf(gp.ch()), x + gp.x(), y + gp.y());
+        }
     }
 
     private void drawBadge(Graphics2D g, String name, Color routeColor, LayoutConfig.Rect br) {
@@ -111,7 +113,26 @@ public final class UpperLCDRenderer {
         g.setColor(C.fgColor());
         g.fillRoundRect(bx + 6, by + 6, Math.min(bw - 12, br.w() - 12), bh - 12, 2, 2);
         g.setColor(C.bgColor());
-        g.drawString(name, bx + 10, by + fm.getAscent() + 3);
+        float px = bx + 10;
+        for (int i = 0; i < name.length(); i++) {
+            char c = name.charAt(i);
+            Font f = Fonts.resolveFor(c, bf);
+            g.setFont(f);
+            g.drawString(String.valueOf(c), px, by + fm.getAscent() + 3);
+            px += g.getFontMetrics(f).stringWidth(String.valueOf(c));
+        }
+    }
+
+    /** Draw text char-by-char, falling back to the bundled CJK font for any glyph the primary font lacks. */
+    private void drawFallback(Graphics2D g, String text, Font font, float x, float baseline) {
+        for (int i = 0; i < text.length(); i++) {
+            char c = text.charAt(i);
+            Font f = Fonts.resolveFor(c, font);
+            g.setFont(f);
+            String ch = String.valueOf(c);
+            g.drawString(ch, x, baseline);
+            x += g.getFontMetrics(f).stringWidth(ch);
+        }
     }
 
     /** Font loader — ShinGo (user) → MPlus (bundled) → Noto → SansSerif. */
@@ -124,6 +145,9 @@ public final class UpperLCDRenderer {
         }
         static Font clock(int size) {
             return com.hybrizat.crndisplaynext.client.FontLoader.clock(size);
+        }
+        static Font resolveFor(char c, Font primary) {
+            return com.hybrizat.crndisplaynext.client.FontLoader.resolveFor(primary, c);
         }
     }
 }

@@ -92,26 +92,45 @@ public class DynamicTextureHolder implements AutoCloseable {
     /**
      * Decode server-delivered image bytes on the worker thread, then copy +
      * upload on the main thread.
+     *
+     * <p>The current image stays visible while the new one decodes (no
+     * blanking): the texture is swapped only once the new pixels have been
+     * uploaded, so a re-delivery never causes a visible flash.
+     *
+     * @param onSuccess invoked on the main thread after the new image is uploaded
+     * @param onFailure invoked on the main thread if the bytes cannot be decoded
      */
-    public void loadBytes(byte[] data) {
-        if (closed || data == null || data.length == 0) return;
-        ready = false;
+    public void loadBytes(byte[] data, Runnable onSuccess, Runnable onFailure) {
+        Runnable ok = onSuccess == null ? () -> {} : onSuccess;
+        Runnable fail = onFailure == null ? () -> {} : onFailure;
+        if (closed || data == null || data.length == 0) { fail.run(); return; }
         CompletableFuture.runAsync(() -> {
             BufferedImage bi;
             try {
                 bi = ImageIO.read(new ByteArrayInputStream(data));
             } catch (Exception e) {
                 LOG.error("Failed to decode image bytes", e);
+                bi = null;
+            }
+            if (bi == null) {
+                LOG.warn("Cannot decode delivered image bytes");
+                Minecraft.getInstance().execute(fail);
                 return;
             }
-            if (bi == null) { LOG.warn("Cannot decode delivered image bytes"); return; }
+            final BufferedImage img = bi;
             Minecraft.getInstance().execute(() -> {
-                if (closed) return;
-                copyFromBuffered(bi);
+                if (closed) { fail.run(); return; }
+                copyFromBuffered(img);
                 upload();
                 ready = true;
+                ok.run();
             });
         }, ImageExecutors.CLIENT_DECODE);
+    }
+
+    /** Compatibility overload without completion callbacks. */
+    public void loadBytes(byte[] data) {
+        loadBytes(data, null, null);
     }
 
     public boolean isReady() { return ready && !closed; }

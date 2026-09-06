@@ -2,27 +2,33 @@ package com.hybrizat.crndisplaynext.util;
 
 import java.net.URI;
 import java.util.Locale;
-import java.util.Set;
 
 /**
- * URL format policy for image downloads.
+ * URL policy for image downloads.
  *
- * <p>Whitelisting image hosts is not practical (images come from many
- * hosts/CDNs), so we validate the URL <i>shape</i> instead: only http(s) URLs
- * whose path ends with a known image extension are allowed to trigger a
- * download. This rejects HTML pages, API endpoints, local paths and other
- * non-image targets before any network I/O happens.</p>
+ * <p>Whitelisting image hosts or file extensions is not practical: images
+ * come from many hosts/CDNs, and many legitimate image URLs carry no file
+ * extension at all (API-style links, CDN tokens, redirect endpoints, ...).
+ * So we validate only what a player-supplied URL must satisfy before the
+ * server may fetch it:
+ *
+ * <ul>
+ *   <li>http/https scheme with a real host,</li>
+ *   <li>no loopback / link-local / cloud-metadata targets (SSRF guard);
+ *       LAN hosts stay allowed for local image servers.</li>
+ * </ul>
+ *
+ * <p>The actual image-format check happens server-side: every download is
+ * decoded with ImageIO and rejected when undecodable or oversized
+ * (see {@code ServerImageCache}), so non-image content never reaches a
+ * client regardless of what the URL looks like.</p>
  */
 public final class ImageUrlPolicy {
-
-    /** Image extensions that Java's ImageIO can decode (plus common web formats). */
-    private static final Set<String> IMAGE_EXTENSIONS =
-        Set.of("png", "jpg", "jpeg", "gif", "bmp", "tif", "tiff", "webp");
 
     private ImageUrlPolicy() {}
 
     /**
-     * @return true if the URL looks like a downloadable image resource.
+     * @return true if the URL is allowed to trigger a server-side fetch.
      */
     public static boolean isPlausibleImageUrl(String url) {
         if (url == null) return false;
@@ -46,17 +52,12 @@ public final class ImageUrlPolicy {
         // (server-side fetches must not be steered at internal services).
         // LAN hosts (192.168.x, 10.x, 172.16-31.x) remain allowed for local image servers.
         String host = uri.getHost().toLowerCase(Locale.ROOT);
+        if (host.startsWith("[") && host.endsWith("]")) host = host.substring(1, host.length() - 1); // [::1] form
         if (host.equals("localhost") || host.equals("::1")) return false;
         if (host.startsWith("127.") || host.startsWith("169.254.")) return false;
         if (host.equals("100.100.100.200") || host.equals("metadata.google.internal")
                 || host.equals("instance-data")) return false;
 
-        String path = uri.getPath();
-        if (path == null || path.isEmpty()) return false;
-        int slash = path.lastIndexOf('/');
-        String name = slash >= 0 ? path.substring(slash + 1) : path;
-        int dot = name.lastIndexOf('.');
-        if (dot < 0 || dot == name.length() - 1) return false;
-        return IMAGE_EXTENSIONS.contains(name.substring(dot + 1).toLowerCase(Locale.ROOT));
+        return true;
     }
 }

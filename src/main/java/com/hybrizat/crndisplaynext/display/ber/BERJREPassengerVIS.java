@@ -32,6 +32,7 @@ import java.awt.*;
 import java.awt.image.BufferedImage;
 import java.util.*;
 import java.util.List;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * JRE Passenger VIS — E235-0 replica.
@@ -63,7 +64,7 @@ public class BERJREPassengerVIS implements AbstractAdvancedDisplayRenderer<JREVI
      * (CRN called tick/render/update for this exact block entity instance).
      */
     private static final class Entry {
-        final AdvancedDisplayBlockEntity be;
+        AdvancedDisplayBlockEntity be; // re-bindable: same display, new BE after chunk reload
         final DynamicTextureHolder holder;
         int lastActive;
 
@@ -77,7 +78,7 @@ public class BERJREPassengerVIS implements AbstractAdvancedDisplayRenderer<JREVI
     }
     /** A display is considered dead after this many ticks without renderer activity. */
     static final int STALE_AFTER_TICKS = 200;
-    private static final Map<Long, Entry> H = new HashMap<>();
+    private static final Map<Long, Entry> H = new ConcurrentHashMap<>();
     private Page page = Page.FULL_ROUTE;
     private long pageStart;
     private int cw = 16, ch = 16;
@@ -100,7 +101,7 @@ public class BERJREPassengerVIS implements AbstractAdvancedDisplayRenderer<JREVI
         if (!be.isController()) return;
         long key = be.getBlockPos().asLong();
         Entry entry = H.get(key);
-        if (entry != null && entry.be != be) release(key);
+        if (entry != null && entry.be != be) entry.be = be; // chunk reload - canvas survives
         entry = H.get(key);
         if (entry == null || !entry.holder.isReady()) return;
         entry.touch();
@@ -120,7 +121,7 @@ public class BERJREPassengerVIS implements AbstractAdvancedDisplayRenderer<JREVI
         ch = be.getYSizeScaled() * 16;
         long k = be.getBlockPos().asLong();
         Entry entry = H.get(k);
-        if (entry != null && entry.be != be) release(k);
+        if (entry != null && entry.be != be) entry.be = be; // chunk reload - canvas survives
         entry = H.get(k);
         if (entry == null) {
             entry = new Entry(be, new DynamicTextureHolder(SW, SH));
@@ -423,12 +424,13 @@ public class BERJREPassengerVIS implements AbstractAdvancedDisplayRenderer<JREVI
     }
 
     private void drawVert(Graphics2D g, String text, Font font, int cx, int top) {
-        g.setFont(font);
         text = com.hybrizat.crndisplaynext.client.KanjiConverter.toDisplay(text, font);
-        int asc = g.getFontMetrics().getAscent();
+        int asc = g.getFontMetrics(font).getAscent();
         for (int j = 0; j < text.length(); j++) {
-            String ch = text.substring(j, j + 1);
-            int cw = g.getFontMetrics().stringWidth(ch);
+            char c = text.charAt(j);
+            Font f = FontLoader.resolveFor(font, c);
+            String ch = String.valueOf(c);
+            int cw = g.getFontMetrics(f).stringWidth(ch);
             g.drawString(ch, cx - cw/2, top + asc + j * font.getSize());
         }
     }

@@ -34,7 +34,7 @@ public class GfxUrlCommand {
                         if (!ImageUrlPolicy.isPlausibleImageUrl(url)) {
                             CRNDisplayNextMod.LOGGER.warn("[GfxUrl] rejected non-image URL: {}", url);
                             p.displayClientMessage(net.minecraft.network.chat.Component.literal(
-                                "Not an image URL — use an http(s) link with an image extension (.png/.jpg/...)"), false);
+                                "Not a valid image URL — use an http(s) link with a host"), false);
                             return 0;
                         }
                         var hit = p.pick(20, 0, false);
