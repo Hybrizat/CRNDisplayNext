@@ -14,6 +14,7 @@ import net.minecraft.world.level.block.entity.BlockEntity;
 import net.neoforged.neoforge.network.handling.IPayloadContext;
 import com.hybrizat.crndisplaynext.server.ServerImageCache;
 import com.hybrizat.crndisplaynext.util.ImageUrlPolicy;
+import com.hybrizat.crndisplaynext.display.ModDisplayTypesExt;
 
 /**
  * Client→Server: set image URL for graphics display.
@@ -42,27 +43,34 @@ public record GraphicsUrlPayload(BlockPos pos, String url) implements CustomPack
             BlockEntity be = ctx.player().level().getBlockEntity(p.pos());
             if (be instanceof AdvancedDisplayBlockEntity adbe) {
                 var settings = adbe.getSettings();
-                if (settings instanceof GraphicsDisplaySettings gs) {
-                    gs.setImageUrl(p.url());
-                    if (ctx.player().getServer() != null) {
-                        CRNDisplayNextMod.LOGGER.info("[GfxUrl] Caching URL: {}", p.url());
-                        var cache = ServerImageCache.get(ctx.player().getServer());
-                        cache.downloadAndCache(p.url()).thenAccept(entry -> {
-                            CRNDisplayNextMod.LOGGER.info("[GfxUrl] Cached: {} -> {}",
-                                p.url(), entry != null ? entry.id() : "FAILED");
-                        });
-                    }
-                    adbe.setDisplayType(adbe.getDisplayType(), gs);
-                    adbe.setChanged();
-                    if (be.getLevel() instanceof ServerLevel sl) {
-                        sl.sendBlockUpdated(p.pos(), be.getBlockState(), be.getBlockState(), 3);
-                        // Dedicated-server fix: explicitly push the BE NBT (incl. imgUrl)
-                        // to every online player so the client reads the updated settings.
-                        var updatePacket = adbe.getUpdatePacket();
-                        if (updatePacket != null) {
-                            for (net.minecraft.server.level.ServerPlayer sp : sl.getServer().getPlayerList().getPlayers()) {
-                                sp.connection.send(updatePacket);
-                            }
+                com.hybrizat.crndisplaynext.display.settings.GraphicsDisplaySettings gs;
+                if (settings instanceof com.hybrizat.crndisplaynext.display.settings.GraphicsDisplaySettings gs0) {
+                    gs = gs0;
+                } else {
+                    CRNDisplayNextMod.LOGGER.info("[GfxUrl] switching display to jre_graphics (was {})",
+                        settings == null ? "null" : settings.getClass().getSimpleName());
+                    gs = new com.hybrizat.crndisplaynext.display.settings.GraphicsDisplaySettings();
+                    adbe.setDisplayType(ModDisplayTypesExt.JRE_GRAPHICS, gs);
+                }
+                gs.setImageUrl(p.url());
+                adbe.setDisplayType(adbe.getDisplayType(), gs);
+                adbe.setChanged();
+                if (ctx.player().getServer() != null) {
+                    CRNDisplayNextMod.LOGGER.info("[GfxUrl] Caching URL: {}", p.url());
+                    var cache = ServerImageCache.get(ctx.player().getServer());
+                    cache.downloadAndCache(p.url()).thenAccept(entry -> {
+                        CRNDisplayNextMod.LOGGER.info("[GfxUrl] Cached: {} -> {}",
+                            p.url(), entry != null ? entry.id() : "FAILED");
+                    });
+                }
+                if (be.getLevel() instanceof ServerLevel sl) {
+                    sl.sendBlockUpdated(p.pos(), be.getBlockState(), be.getBlockState(), 3);
+                    // Dedicated-server fix: explicitly push the BE NBT (incl. imgUrl)
+                    // to every online player so the client reads the updated settings.
+                    var updatePacket = adbe.getUpdatePacket();
+                    if (updatePacket != null) {
+                        for (net.minecraft.server.level.ServerPlayer sp : sl.getServer().getPlayerList().getPlayers()) {
+                            sp.connection.send(updatePacket);
                         }
                     }
                 }

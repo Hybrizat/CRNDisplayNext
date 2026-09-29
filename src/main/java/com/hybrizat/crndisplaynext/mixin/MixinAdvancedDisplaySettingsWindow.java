@@ -5,6 +5,7 @@ import com.hybrizat.crndisplaynext.api.IAdvancedDisplayBEExt;
 import com.hybrizat.crndisplaynext.client.screen.GraphicsImageScreen;
 import com.hybrizat.crndisplaynext.display.settings.GraphicsDisplaySettings;
 import com.hybrizat.crndisplaynext.network.HideTechnicalStopsPacket;
+import com.simibubi.create.content.contraptions.AbstractContraptionEntity;
 import de.mrjulsen.crn.block.blockentity.AdvancedDisplayBlockEntity;
 import de.mrjulsen.crn.client.gui.widgets.ModularWidgetContainer;
 import de.mrjulsen.crn.client.gui.widgets.create.CreateButton;
@@ -112,6 +113,25 @@ public abstract class MixinAdvancedDisplaySettingsWindow extends DLWindow {
         btn.addEventListener(de.mrjulsen.mcdragonlib.client.gui.events.DLGuiStandardEvents.ClickEvent.class,
             (b, evt) -> {
                 BlockPos pos = ((BlockEntity)(Object)blockEntity).getBlockPos();
+                
+                // Get the contraption from the window's private field
+                final AbstractContraptionEntity[] contraptionHolder = new AbstractContraptionEntity[1];
+                try {
+                    Field cf = AdvancedDisplaySettingsWindow.class.getDeclaredField("contraption");
+                    cf.setAccessible(true);
+                    contraptionHolder[0] = (AbstractContraptionEntity) cf.get(this);
+                } catch (Exception e) {
+                    CRNDisplayNextMod.LOGGER.warn("[CRNExt] Failed to get contraption", e);
+                }
+                final AbstractContraptionEntity contraption = contraptionHolder[0];
+                
+                // Set callback to reopen this window when GraphicsImageScreen closes
+                GraphicsImageScreen.onCloseCallback = () -> {
+                    // Reopen this window with the correct contraption
+                    DLWindow.openWindow(mgr -> new AdvancedDisplaySettingsWindow(mgr, blockEntity, contraption));
+                };
+                
+                // Open the image settings screen
                 Minecraft.getInstance().setScreen(new GraphicsImageScreen(pos, null));
                 return false;
             });

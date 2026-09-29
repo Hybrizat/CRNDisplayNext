@@ -38,6 +38,9 @@ public class GraphicsImageScreen extends Screen {
         ResourceLocation.fromNamespaceAndPath(CRNDisplayNextMod.MOD_ID, "gfx_preview");
     private static final long PREVIEW_TIMEOUT_MS = 10_000L;
 
+    /** Callback to execute when this screen closes via "Done" button (e.g., reopen parent window). */
+    public static Runnable onCloseCallback = null;
+
     /** Called by CacheListPayload handler to deliver the cache listing to the open screen. */
     public static void onCacheData(List<String> rawEntries) {
         var mc = Minecraft.getInstance();
@@ -63,6 +66,7 @@ public class GraphicsImageScreen extends Screen {
     private Component status;
     private boolean tabCache;
     private long previewRequestedAt;
+    private boolean closedViaDone = false;
 
     // Cached entries with textures (instance-local, avoids classloader issues)
     private record Cached(String id, String url, int w, int h, ResourceLocation tex) {}
@@ -75,6 +79,29 @@ public class GraphicsImageScreen extends Screen {
         this.bePos = bePos;
         this.urlDraft = currentUrl == null ? "" : currentUrl;
     }
+
+    @Override
+    public void onClose() {
+        releasePreview();
+        // Release all cached-thumbnail textures
+        for (Cached c : cachedEntries) {
+            if (c.tex() != null) { try { Minecraft.getInstance().getTextureManager().release(c.tex()); } catch (Exception ignored) {} }
+        }
+        cachedEntries.clear();
+        
+        // Only execute callback if closed via "Done" button, not when parent closes us
+        if (closedViaDone) {
+            Runnable cb = onCloseCallback;
+            onCloseCallback = null; // Clear to avoid double-execution
+            if (cb != null) {
+                Minecraft.getInstance().execute(cb);
+            }
+        } else {
+            super.onClose();
+        }
+    }
+
+    @Override public boolean isPauseScreen() { return false; }
 
     void setCacheData(List<String> raw) {
         for (Cached c : cachedEntries) if (c.tex != null) Minecraft.getInstance().getTextureManager().release(c.tex);
@@ -97,8 +124,6 @@ public class GraphicsImageScreen extends Screen {
                 }
                 cachedEntries.add(new Cached(p[0], p[1], w, h, tex));
             } catch (Exception e) {
-                // One bad entry must not abort the whole list, and any
-                // partially-created native resources must be released.
                 if (dt != null) dt.close();
                 if (ni != null) ni.close();
             }
@@ -107,47 +132,51 @@ public class GraphicsImageScreen extends Screen {
 
     @Override protected void init() {
         int cx = width / 2, top = 25;
-        addRenderableWidget(Button.builder(Component.literal("URL"), b -> { tabCache = false; rebuild(); })
+        addRenderableWidget(Button.builder(Component.literal("URL"), b -> { tabCache = false; refreshTabs(); })
             .pos(cx - 152, top).size(75, 20).build());
         addRenderableWidget(Button.builder(Component.literal("Cached"), b -> {
-            tabCache = true; RequestCachePayload.request(); rebuild();
-        }).pos(cx - 77, top).size(75, 20).build());
-        addRenderableWidget(Button.builder(Component.literal("Apply"), b -> apply())
-            .pos(cx - 100, height - 35).size(200, 20).build());
-        addRenderableWidget(Button.builder(Component.literal("Close"), b -> onClose())
-            .pos(cx - 30, height - 58).size(60, 20).build());
-        if (!tabCache) {
-            urlInput = new EditBox(font, cx - 155, top + 28, 310, 20, Component.literal("URL"));
-            urlInput.setMaxLength(2048);
-            urlInput.setValue(urlDraft);
-            addRenderableWidget(urlInput);
-            addRenderableWidget(Button.builder(Component.literal("Load"), b -> requestPreview())
-                .pos(cx + 160, top + 28).size(50, 20).build());
-        }
-    }
+            tabCache = true; refreshTabs(); RequestCachePayload.request();
+        }).pos(cx - 72, top).size(75, 20).build());
+        addRenderableWidget(Button.builder(Component.literal("Load"), b -> requestPreview())
+            .pos(cx + 8, top).size(75, 20).build());
+        addRenderableWidget(Button.builder(Component.literal("Done"), b -> {
+            closedViaDone = true;
+            onClose();
+        }).pos(cx + 88, top).size(75, 20).build());
 
-    void rebuild() { clearWidgets(); init(); }
-
-    private void apply() {
-        if (!tabCache && urlInput != null) {
-            String u = urlInput.getValue().trim();
-            if (u.isBlank()) return;
-            if (!ImageUrlPolicy.isPlausibleImageUrl(u)) {
-                status = Component.literal("Not a valid image URL — use an http(s) link with a host");
-                return;
+        // Increase max length for URL input (default is very limited)
+        urlInput = new EditBox(font, cx - 155, 45, 310, 18, Component.literal("Image URL")) {
+            @Override
+            public void setValue(String value) {
+                super.setValue(value);
             }
-            urlDraft = u;
-            PacketDistributor.sendToServer(new GraphicsUrlPayload(bePos, u));
-        }
-        onClose();
+        };
+        urlInput.setMaxLength(1024); // Allow long URLs
+        urlInput.setValue(urlDraft);
+        urlInput.setResponder(this::onUrlChanged);
+        addRenderableWidget(urlInput);
+
+        RequestCachePayload.request();
+        refreshTabs();
     }
 
-    /** Ask the SERVER to fetch the URL and deliver it back as a preview. */
+    private void refreshTabs() {
+        // Just re-render the tab content without re-initializing everything
+        // The tab buttons are already added in init()
+    }
+
+    private void onUrlChanged(String u) {
+        urlDraft = u;
+    }
+
     private void requestPreview() {
-        String u = urlInput.getValue().trim();
-        if (u.isBlank()) { status = Component.literal("URL empty"); return; }
+        String u = urlDraft.trim();
+        if (u.isEmpty()) {
+            status = Component.literal("Please enter an image URL first");
+            return;
+        }
         if (!ImageUrlPolicy.isPlausibleImageUrl(u)) {
-            status = Component.literal("Not a valid image URL — use an http(s) link with a host");
+            status = Component.literal("Invalid URL — must be http(s) with a host");
             return;
         }
         urlDraft = u;
@@ -180,8 +209,6 @@ public class GraphicsImageScreen extends Screen {
                 return null;
             }
         }, ImageExecutors.CLIENT_DECODE).thenAccept(small -> Minecraft.getInstance().execute(() -> {
-            // The screen may have been closed while the decode was in flight —
-            // registering a texture then would leak it (no onClose to release it).
             if (Minecraft.getInstance().screen != this) {
                 if (small != null) small.flush();
                 return;
@@ -247,7 +274,7 @@ public class GraphicsImageScreen extends Screen {
             for (int i = 0; i < Math.min(cachedEntries.size(), 12); i++) {
                 int tx = x0+(i%cols)*(tw+3), ty = y0+(i/cols)*(th+18);
                 if (mx>=tx && mx<=tx+tw && my>=ty && my<=ty+th+14) {
-                    tabCache = false; rebuild();
+                    tabCache = false;
                     urlDraft = cachedEntries.get(i).url;
                     urlInput.setValue(urlDraft);
                     requestPreview();
@@ -258,21 +285,7 @@ public class GraphicsImageScreen extends Screen {
         return super.mouseClicked(mx, my, btn);
     }
 
-    @Override public void onClose() {
-        releasePreview();
-        // Release all cached-thumbnail textures — they were registered in the
-        // global TextureManager and would otherwise stay resident after close.
-        for (Cached c : cachedEntries) {
-            if (c.tex() != null) { try { Minecraft.getInstance().getTextureManager().release(c.tex()); } catch (Exception ignored) {} }
-        }
-        cachedEntries.clear();
-        super.onClose();
-    }
-    @Override public boolean isPauseScreen() { return false; }
-
     @Override public void onFilesDrop(List<Path> paths) {
-        // Local file paths cannot be served across the network; only http(s)
-        // image URLs are supported.
         if (!paths.isEmpty()) {
             urlDraft = "";
             if (urlInput != null) urlInput.setValue("");
