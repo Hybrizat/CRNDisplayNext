@@ -70,3 +70,11 @@ desktop.ini
 .run/
 # scratch dir (local probes/extracts)
 .tmp/
+.tmp_*
+
+# ── Local long-term memory ─────────────
+memory.md
+
+# ── Local Gradle cache used for reproducible builds ──
+.gradle-user/
+

@@ -6,9 +6,7 @@
   "refmap": "crndisplaynext.refmap.json",
   "mixins": [
     "MixinAdvancedDisplayBE",
-    "MixinStationDisplayPrepare",
-    "MixinBasicTrainDisplayData",
-    "MixinBasicTrainDisplayDataFactory"
+    "MixinStationDisplayPrepare"
   ],
   "client": [
     "MixinAdvancedDisplaySettingsWindow"

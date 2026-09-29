@@ -9,11 +9,11 @@ import de.mrjulsen.crn.block.properties.ETimeDisplay;
 import de.mrjulsen.crn.client.ber.AdvancedDisplayRenderInstance;
 import de.mrjulsen.crn.client.ber.variants.AbstractAdvancedDisplayRenderer;
 import de.mrjulsen.crn.client.lang.CustomLanguage;
-import de.mrjulsen.crn.config.ModCommonConfig;
-import de.mrjulsen.crn.data.train.ETrainStopState;
-import de.mrjulsen.crn.data.train.portable.BasicTrainDisplayData;
-import de.mrjulsen.crn.data.train.portable.StationDisplayData;
-import de.mrjulsen.crn.data.train.portable.TrainStopDisplayData;
+import de.mrjulsen.crn.config.ModServerConfig;
+import com.hybrizat.crndisplaynext.compat.ETrainStopState;
+import com.hybrizat.crndisplaynext.compat.BasicTrainDisplayData;
+import com.hybrizat.crndisplaynext.compat.DisplayEntry;
+import com.hybrizat.crndisplaynext.compat.TrainStopDisplayData;
 import de.mrjulsen.crn.util.ModUtils;
 import de.mrjulsen.mcdragonlib.client.ber.BERGraphics;
 import de.mrjulsen.mcdragonlib.client.ber.BERLabel;
@@ -61,8 +61,8 @@ public abstract class AbstractJRERenderer<S extends AbstractJRESettings>
     protected static final int COL_PLATFORM    = 3;
     protected static final int COL_COUNT       = 4;
 
-    protected List<StationDisplayData> lastDepartures = new ArrayList<>();
-    public List<StationDisplayData> getLastDepartures() { return lastDepartures; }
+    protected List<DisplayEntry> lastDepartures = new ArrayList<>();
+    public List<DisplayEntry> getLastDepartures() { return lastDepartures; }
 
     protected BERLabel[][] rows     = new BERLabel[0][];
     // Out-of-service label shown when no trains available
@@ -129,11 +129,11 @@ public abstract class AbstractJRERenderer<S extends AbstractJRESettings>
         // Note: deliberately NO "departing soon" time window (BERPlatformSimple
         // behavior) — the board lists all upcoming departures at this station.
         long now = ModUtils.getTransformedWorldTime();
-        lastDepartures = be.getStops().stream()
+        lastDepartures = com.hybrizat.crndisplaynext.compat.CrnDisplayAdapter.board(be).stream()
             .filter(x -> !x.isNextSectionExcluded())
             .filter(x -> !x.getTrainData().isCancelled()
                 || now < x.getStationData().getScheduledDepartureTime()
-                         + ModCommonConfig.DISPLAY_LEAD_TIME.get())
+                         + ModServerConfig.DISPLAY_LEAD_TIME.get())
             .limit(maxRows)
             .collect(Collectors.toList());
 
@@ -210,9 +210,9 @@ public abstract class AbstractJRERenderer<S extends AbstractJRESettings>
     }
 
     // ── Pass 1: set text content ──────────────────────────────────────────
-    private void populateText(BERLabel[] row, StationDisplayData stop, S settings, DLColor font) {
-        BasicTrainDisplayData train   = stop.getTrainData();
-        TrainStopDisplayData  station = stop.getStationData();
+    private void populateText(BERLabel[] row, DisplayEntry stop, S settings, DLColor font) {
+        BasicTrainDisplayData train   = stop.getTrainData().getTrainData();
+        TrainStopDisplayData  station = stop.getStationData().getStationData();
         EJRETrainTextMode     mode    = settings.getTrainTextMode();
         boolean               useETA  = settings.getTimeDisplay() == ETimeDisplay.ETA;
         boolean hasLineColor = train.hasColor(ETrainStopState.DEPARTURE);
@@ -261,7 +261,7 @@ public abstract class AbstractJRERenderer<S extends AbstractJRESettings>
 
         // Destination
         String dirSfx = loc("gui.crndisplaynext.jre.direction_suffix", "方面");
-        row[COL_DEST].text.set(TextUtils.text(station.getDestination() + dirSfx));
+        row[COL_DEST].text.set(TextUtils.text(stop.getStationData().getDestination() + dirSfx));
         row[COL_DEST].color.set(font);
 
         // Platform
@@ -320,3 +320,5 @@ public abstract class AbstractJRERenderer<S extends AbstractJRESettings>
         catch (Exception e) { return fallback; }
     }
 }
+
+

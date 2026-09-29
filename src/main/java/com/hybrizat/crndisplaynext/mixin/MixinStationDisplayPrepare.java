@@ -5,7 +5,7 @@ import com.hybrizat.crndisplaynext.api.IHideTechnicalStops;
 import com.hybrizat.crndisplaynext.util.StopFilter;
 
 import de.mrjulsen.crn.block.blockentity.AdvancedDisplayBlockEntity;
-import de.mrjulsen.crn.data.train.portable.StationDisplayData;
+import de.mrjulsen.crn.api.core.snapshot.BoardEntry;
 
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
@@ -32,7 +32,7 @@ public class MixinStationDisplayPrepare {
             String filter,
             int maxLines,
             AdvancedDisplayBlockEntity controller,
-            CallbackInfoReturnable<List<StationDisplayData>> cir
+            CallbackInfoReturnable<List<BoardEntry>> cir
     ) {
 
         boolean shouldFilter = getHideTechnicalStops(controller);
@@ -41,7 +41,7 @@ public class MixinStationDisplayPrepare {
             return;
         }
 
-        List<StationDisplayData> filtered =
+        List<BoardEntry> filtered =
                 StopFilter.filterDisplayData(
                         cir.getReturnValue(),
                         true

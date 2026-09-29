@@ -1,7 +1,7 @@
 package com.hybrizat.crndisplaynext.util;
 
 import com.hybrizat.crndisplaynext.CRNDisplayNextMod;
-import de.mrjulsen.crn.data.train.portable.StationDisplayData;
+import de.mrjulsen.crn.api.core.snapshot.BoardEntry;
 
 import java.util.List;
 import java.util.stream.Collectors;
@@ -32,33 +32,33 @@ public final class StopFilter {
 
     private StopFilter() {}
 
-    public static List<StationDisplayData> filterDisplayData(List<StationDisplayData> data, boolean enabled) {
+    public static List<BoardEntry> filterDisplayData(List<BoardEntry> data, boolean enabled) {
         if (!enabled || data == null || data.isEmpty()) {
             return data;
         }
 
         CRNDisplayNextMod.LOGGER.debug("[CRNExt] filterDisplayData: input size={}", data.size());
 
-        List<StationDisplayData> result = data.stream()
+        List<BoardEntry> result = data.stream()
                 .filter(entry -> {
                     boolean technical = isTechnicalStop(entry);
                     if (technical) {
                         CRNDisplayNextMod.LOGGER.debug(
                                 "[CRNExt] REMOVED: arrival={}, departure={}, isLastStop={}, isNextExcluded={}, isPrevExcluded={}",
-                                entry.getStationData().getScheduledArrivalTime(),
-                                entry.getStationData().getScheduledDepartureTime(),
-                                entry.isLastStop(),
-                                entry.isNextSectionExcluded(),
-                                entry.isPrevSectionExcluded()
+                                entry.scheduled().arrival(),
+                                entry.scheduled().departure(),
+                                entry.terminus(),
+                                entry.sectionChange(),
+                                entry.originating()
                         );
                     } else {
                         CRNDisplayNextMod.LOGGER.debug(
                                 "[CRNExt] KEPT:    arrival={}, departure={}, isLastStop={}, isNextExcluded={}, isPrevExcluded={}",
-                                entry.getStationData().getScheduledArrivalTime(),
-                                entry.getStationData().getScheduledDepartureTime(),
-                                entry.isLastStop(),
-                                entry.isNextSectionExcluded(),
-                                entry.isPrevSectionExcluded()
+                                entry.scheduled().arrival(),
+                                entry.scheduled().departure(),
+                                entry.terminus(),
+                                entry.sectionChange(),
+                                entry.originating()
                         );
                     }
                     return !technical;
@@ -69,10 +69,10 @@ public final class StopFilter {
         return result;
     }
 
-    public static boolean isTechnicalStop(StationDisplayData entry) {
+    public static boolean isTechnicalStop(BoardEntry entry) {
         try {
-            long arrival   = entry.getStationData().getScheduledArrivalTime();
-            long departure = entry.getStationData().getScheduledDepartureTime();
+            long arrival   = entry.scheduled().arrival();
+            long departure = entry.scheduled().departure();
             long dwell     = departure - arrival;
 
             // Filter ALL dwell=0 entries — no exceptions.

@@ -18,9 +18,9 @@ Create: Railways Navigator Display Native Extended 是 [Create: Railways Navigat
 ---
 
 ## 模组依赖
-- Create 6.0.9
-- Create: Railways Navigator alpha 0.9.1 C6
-- DragonLib beta 3.0.24
+- Create 6.0.10
+- Create: Railways Navigator beta 0.10.0 C6
+- DragonLib beta 3.0.28
 
 *只在以上模组版本中测试，不保证其他版本的兼容性*
 

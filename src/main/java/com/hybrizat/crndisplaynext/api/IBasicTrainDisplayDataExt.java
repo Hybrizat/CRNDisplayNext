@@ -1,6 +1,6 @@
 package com.hybrizat.crndisplaynext.api;
 
-import de.mrjulsen.crn.data.train.ETrainStopState;
+import com.hybrizat.crndisplaynext.compat.ETrainStopState;
 import de.mrjulsen.mcdragonlib.util.DLColor;
 
 public interface IBasicTrainDisplayDataExt {

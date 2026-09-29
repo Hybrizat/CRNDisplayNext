@@ -9,7 +9,7 @@ import de.mrjulsen.crn.block.blockentity.AdvancedDisplayBlockEntity.EUpdateReaso
 import de.mrjulsen.crn.client.ber.AdvancedDisplayRenderInstance;
 import de.mrjulsen.crn.client.ber.variants.AbstractAdvancedDisplayRenderer;
 import de.mrjulsen.crn.client.lang.CustomLanguage;
-import de.mrjulsen.crn.data.train.ETrainStopState;
+import com.hybrizat.crndisplaynext.compat.ETrainStopState;
 import de.mrjulsen.mcdragonlib.client.ber.BERGraphics;
 import de.mrjulsen.mcdragonlib.client.ber.BERLabel;
 import de.mrjulsen.mcdragonlib.client.ber.BERLabel.EScrollMode;
@@ -73,8 +73,8 @@ public class BERJREFront implements AbstractAdvancedDisplayRenderer<JREFrontSett
     public void render(BERGraphics<AdvancedDisplayBlockEntity> graphics,
                        float partial, AdvancedDisplayRenderInstance parent,
                        int light, boolean backSide) {
-        boolean oos = graphics.blockEntity().getTrainData() == null
-            || graphics.blockEntity().getTrainData().getState()
+        boolean oos = com.hybrizat.crndisplaynext.compat.CrnDisplayAdapter.train(graphics.blockEntity()) == null
+            || com.hybrizat.crndisplaynext.compat.CrnDisplayAdapter.train(graphics.blockEntity()).getState()
                .isIrregular(getDisplaySettings(graphics.blockEntity()).showDoNotBoardText());
         if (oos) { oosLabel.render(graphics, light); return; }
         aLabel.render(graphics, light);
@@ -96,12 +96,12 @@ public class BERJREFront implements AbstractAdvancedDisplayRenderer<JREFrontSett
         oosLabel.glowing.set(be.isGlowing());
         oosLabel.color.set(font);
 
-        boolean oos = be.getTrainData() == null
-            || be.getTrainData().getState().isIrregular(settings.showDoNotBoardText());
+        boolean oos = com.hybrizat.crndisplaynext.compat.CrnDisplayAdapter.train(be) == null
+            || com.hybrizat.crndisplaynext.compat.CrnDisplayAdapter.train(be).getState().isIrregular(settings.showDoNotBoardText());
 
         if (oos) {
-            boolean noBoard = be.getTrainData() != null
-                && be.getTrainData().getState().shouldNotBoard(settings.showDoNotBoardText());
+            boolean noBoard = com.hybrizat.crndisplaynext.compat.CrnDisplayAdapter.train(be) != null
+                && com.hybrizat.crndisplaynext.compat.CrnDisplayAdapter.train(be).getState().shouldNotBoard(settings.showDoNotBoardText());
             oosLabel.text.set(noBoard
                 ? CustomLanguage.translate(KEY_NO_BOARD)
                 : CustomLanguage.translate(KEY_OOS));
@@ -111,7 +111,7 @@ public class BERJREFront implements AbstractAdvancedDisplayRenderer<JREFrontSett
         }
 
         ETrainStopState stopState = ETrainStopState.beforeArrival(
-            !be.getTrainData().isWaitingAtStation());
+            !com.hybrizat.crndisplaynext.compat.CrnDisplayAdapter.train(be).isWaitingAtStation());
 
         // ── A label: Category ───────────────────────────────────────────
         aLabel.clippingArea.set(clip);
@@ -120,14 +120,14 @@ public class BERJREFront implements AbstractAdvancedDisplayRenderer<JREFrontSett
         String categoryName = "";
         DLColor categoryColor = DLColor.TRANSPARENT;
         boolean catIsLineName = false;
-        if (be.getTrainData().getTrainData() instanceof IBasicTrainDisplayDataExt ext) {
+        if (com.hybrizat.crndisplaynext.compat.CrnDisplayAdapter.train(be).getTrainData() instanceof IBasicTrainDisplayDataExt ext) {
             categoryName  = ext.crndisplaynext$getCategoryName(stopState);
             categoryColor = ext.crndisplaynext$getCategoryColor(stopState);
         }
         // Fall back to line color if no category configured
         if (categoryName.isBlank()) {
-            categoryName  = be.getTrainData().getTrainData().getName(stopState);
-            categoryColor = be.getTrainData().getTrainData().getColor(stopState);
+            categoryName  = com.hybrizat.crndisplaynext.compat.CrnDisplayAdapter.train(be).getTrainData().getName(stopState);
+            categoryColor = com.hybrizat.crndisplaynext.compat.CrnDisplayAdapter.train(be).getTrainData().getColor(stopState);
             catIsLineName = true; // A already shows the line name
         }
 
@@ -151,10 +151,10 @@ public class BERJREFront implements AbstractAdvancedDisplayRenderer<JREFrontSett
         if (bIsLineName && catIsLineName) {
             bText = ""; // A already shows the line name → B stays empty
         } else if (bIsLineName) {
-            bText = be.getTrainData().getTrainData().getName(stopState);
+            bText = com.hybrizat.crndisplaynext.compat.CrnDisplayAdapter.train(be).getTrainData().getName(stopState);
         } else {
-            bText = be.getTrainData().getCurrentStop().isPresent()
-                ? be.getTrainData().getCurrentStop().get().getDestination() : "";
+            bText = com.hybrizat.crndisplaynext.compat.CrnDisplayAdapter.train(be).getCurrentStop().isPresent()
+                ? com.hybrizat.crndisplaynext.compat.CrnDisplayAdapter.train(be).getCurrentStop().get().getDestination() : "";
         }
         bLabel.text.set(TextUtils.text(bText).withStyle(ChatFormatting.BOLD));
 

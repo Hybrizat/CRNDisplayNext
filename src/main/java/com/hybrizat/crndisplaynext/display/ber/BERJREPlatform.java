@@ -4,8 +4,8 @@ import com.hybrizat.crndisplaynext.display.settings.JREPlatformSettings;
 import de.mrjulsen.crn.block.blockentity.AdvancedDisplayBlockEntity;
 import de.mrjulsen.crn.block.blockentity.AdvancedDisplayBlockEntity.EUpdateReason;
 import de.mrjulsen.crn.client.ber.AdvancedDisplayRenderInstance;
-import de.mrjulsen.crn.data.train.TrainUtils;
-import de.mrjulsen.crn.data.train.portable.StationDisplayData;
+import de.mrjulsen.crn.util.TrainUtils;
+import com.hybrizat.crndisplaynext.compat.DisplayEntry;
 import de.mrjulsen.mcdragonlib.client.ber.BERGraphics;
 import de.mrjulsen.mcdragonlib.client.ber.BERLabel;
 import de.mrjulsen.mcdragonlib.util.Pair;
@@ -136,7 +136,7 @@ public class BERJREPlatform extends AbstractJRERenderer<JREPlatformSettings> {
         super.update(level, pos, state, be, parent, reason);
 
         JREPlatformSettings settings = getDisplaySettings(be);
-        List<StationDisplayData> deps = lastDepartures;
+        List<DisplayEntry> deps = lastDepartures;
         int count = deps.size();
 
         // Rebuild arrow labels if count changed
@@ -156,7 +156,7 @@ public class BERJREPlatform extends AbstractJRERenderer<JREPlatformSettings> {
         }
 
         for (int i = 0; i < count; i++) {
-            StationDisplayData stop = deps.get(i);
+            DisplayEntry stop = deps.get(i);
             float y = 3 + i * LINE_HEIGHT;
 
             // Arrow direction: match each stop's station name / platform number
@@ -168,10 +168,10 @@ public class BERJREPlatform extends AbstractJRERenderer<JREPlatformSettings> {
             //
             // Scheduled station is preferred (always populated from timetable).
             // Real-time is checked as fallback.
-            String scTagName  = stop.getStationData().getScheduledStation().tagName();
-            String scPlatform = stop.getStationData().getScheduledStation().info().platform();
-            String rtTagName  = stop.getStationData().getRealTimeStation().tagName();
-            String rtPlatform = stop.getStationData().getRealTimeStation().info().platform();
+            String scTagName  = stop.getStationData().raw().scheduledStation().displayName();
+            String scPlatform = stop.getStationData().raw().scheduledStation().platform();
+            String rtTagName  = stop.getStationData().raw().station().displayName();
+            String rtPlatform = stop.getStationData().raw().station().platform();
 
             String leftFilter  = settings.getLeftPlatform();
             String rightFilter = settings.getRightPlatform();
@@ -210,3 +210,5 @@ public class BERJREPlatform extends AbstractJRERenderer<JREPlatformSettings> {
         return false;
     }
 }
+
+
