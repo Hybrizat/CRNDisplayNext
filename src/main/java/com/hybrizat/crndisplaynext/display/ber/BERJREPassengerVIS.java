@@ -189,22 +189,22 @@ public class BERJREPassengerVIS implements AbstractAdvancedDisplayRenderer<JREVI
             stnName,
             timeStr, routeColor));
 
-        lower(g, stops, cfg.circularMode(), routeColor);
+        lower(g, stops, cfg.circularMode(), routeColor, d.isWaitingAtStation());
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
     //  Lower LCD (inline for now — to be extracted)
     // ═══════════════════════════════════════════════════════════════════════════
 
-    private void lower(Graphics2D g, List<StationDisplayData> stops, boolean circular, Color routeColor) {
+    private void lower(Graphics2D g, List<StationDisplayData> stops, boolean circular, Color routeColor, boolean dwelling) {
         g.setClip(0, UH, SW, SH - UH);
-        if (circular && stops.size() > 2) lowerCirc(g, stops, routeColor);
-        else lowerRows(g, stops, routeColor);
+        if (circular && stops.size() > 2) lowerCirc(g, stops, routeColor, dwelling);
+        else lowerRows(g, stops, routeColor, dwelling);
         g.setClip(null);
     }
 
     // E235-1000 JapaneseDisplay — two-row bar layout (JapaneseDisplay.show_stops)
-    private void lowerRows(Graphics2D g, List<StationDisplayData> stops, Color rc) {
+    private void lowerRows(Graphics2D g, List<StationDisplayData> stops, Color rc, boolean dwelling) {
         int n = stops.size();
         if (n == 0) return;
         Font nf = font(FONT_STOPS), tf = font(FONT_TIME);
@@ -322,7 +322,9 @@ public class BERJREPassengerVIS implements AbstractAdvancedDisplayRenderer<JREVI
             if (active) {
                 g.setColor(WHITE_BG); g.fillOval(cx - 11, cy - 11, 22, 22);
                 g.setColor(DARK_BG); g.drawOval(cx - 11, cy - 11, 22, 22);
-                if (isCurrent) { g.setColor(CURRENT_COLOR); g.fillOval(cx - 9, cy - 9, 18, 18); }
+                // JR East highlights the station the train is bound for — the one it
+                // stands at while dwelling, the one it is approaching while running.
+                if (i == curr) { g.setColor(CURRENT_COLOR); g.fillOval(cx - 9, cy - 9, 18, 18); }
             } else {
                 // Passed stations: small gray dot
                 g.setColor(PASSED_COLOR); g.fillOval(cx - 5, cy - 5, 10, 10);
@@ -330,8 +332,16 @@ public class BERJREPassengerVIS implements AbstractAdvancedDisplayRenderer<JREVI
             }
         }
 
-        // Pointer pentagon at curr (draw_ptr — right-pointing pentagon + halo)
-        drawPtrPentagon(g, x + (curr % perLine) * stopsW, y + hLine * 1, barH);
+        // Pointer pentagon (draw_ptr — right-pointing pentagon + halo).
+        // JR East: while the train STANDS at a station the pointer sits ON that
+        // station's cell; while it is RUNNING it sits on the boundary between the
+        // station it left and the one it is approaching. That offset is what makes
+        // "dwelling" and "travelling" tell apart at a glance.
+        int ptrCellLeft = x + (curr % perLine) * stopsW;
+        if (!dwelling) {
+            ptrCellLeft = Math.max(x, ptrCellLeft - stopsW / 2);
+        }
+        drawPtrPentagon(g, ptrCellLeft, y + hLine * 1, barH);
 
         // Travel times inside bars (draw_times) - only for upcoming stations
         for (int i = 0; i < n; i++) {
@@ -383,7 +393,7 @@ public class BERJREPassengerVIS implements AbstractAdvancedDisplayRenderer<JREVI
     // OpenRouteFullRouteDisplay — horseshoe: right fold cap kept, left side
     // clipped flat per OpenRouteFullRouteDisplay._draw_track()/_build_positions()
 
-    private void lowerCirc(Graphics2D g, List<StationDisplayData> stops, Color rc) {
+    private void lowerCirc(Graphics2D g, List<StationDisplayData> stops, Color rc, boolean dwelling) {
         int n = stops.size(), half = (n + 1) / 2;
         Font nf = font(FONT_STOPS), tf = font(FONT_TIME);
         int cy = UH + 153, vO = 47, vI = 19, bO = 37, bI = 12, l = 15, r = 15, sw = 28;
@@ -405,9 +415,13 @@ public class BERJREPassengerVIS implements AbstractAdvancedDisplayRenderer<JREVI
             }
         }
         for (int i = 0; i < half; i++) {
-            int cx = l + (int)(spB * i); boolean cur = (i == curIdx);
-            marker(g, cx, tB, cur);
+            boolean cur = (i == curIdx);
+            // JR East: the pointer sits on the station while dwelling and on the
+            // boundary towards it while running.
+            int markerX = dwelling ? l + (int)(spB * i) : Math.max(l, l + (int)(spB * i) - (int)(spB / 2));
+            marker(g, markerX, tB, cur);
             var s = stops.get(i);
+            int cx = l + (int)(spB * i);
             boolean passed = s.getVisitState() == de.mrjulsen.crn.api.core.StopVisitState.PASSED;
             g.setFont(nf); g.setColor(passed ? PASSED_COLOR : DARK_BG);
             String nm = s.getRealTimeStation().displayName();
@@ -477,13 +491,18 @@ public class BERJREPassengerVIS implements AbstractAdvancedDisplayRenderer<JREVI
 
     private void drawVert(Graphics2D g, String text, Font font, int cx, int top) {
         text = com.hybrizat.crndisplaynext.client.KanjiConverter.toDisplay(text, font);
-        int asc = g.getFontMetrics(font).getAscent();
         for (int j = 0; j < text.length(); j++) {
             char c = text.charAt(j);
             Font f = FontLoader.resolveFor(font, c);
             String ch = String.valueOf(c);
-            int cw = g.getFontMetrics(f).stringWidth(ch);
-            g.drawString(ch, cx - cw/2, top + asc + j * font.getSize());
+            // g.setFont(f) is REQUIRED: g.drawString renders with the font currently
+            // set on the Graphics2D, not with the one passed to getFontMetrics(). The
+            // CJK fallback face has different metrics from the primary face, so
+            // measuring one and drawing the other shifted each name sideways.
+            g.setFont(f);
+            var fm = g.getFontMetrics();
+            int cw = fm.stringWidth(ch);
+            g.drawString(ch, cx - cw / 2, top + fm.getAscent() + j * f.getSize());
         }
     }
     /**
