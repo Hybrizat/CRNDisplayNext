@@ -262,6 +262,10 @@ public class BERJREPassengerVIS implements AbstractAdvancedDisplayRenderer<JREVI
             int rightExtra = (isR1Tail || isR2Tail) ? rowTailExtra : 0;
 
             g.setColor(cell);
+            // The head/tail overhang must not shift the CELL CENTRE: the station dot
+            // and its name are both drawn at x + ptr + stopsW/2, and growing the bar
+            // to the left at the head (or right at the tail) moved the bar's centre
+            // 5px away from them.
             g.fillRect(x + ptr - leftExtra, lY, stopsW + leftExtra + rightExtra, barH);
             // Row-end taper: triangle always at row end; chevrons only when 2 rows (route continues)
             if (isR1Tail) {

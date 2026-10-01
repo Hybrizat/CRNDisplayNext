@@ -43,11 +43,11 @@ public final class CrnDisplayAdapter {
         // first of getRemainingStops(), which already starts at the current stop, so
         // while the train stands at a station it would name the station it is at.
         StationDisplayData next = journey == null ? null
-            : journey.nextStop().map(s -> wrapJourney(be, journey, s, false)).orElse(null);
+            : journey.nextStop().map(s -> wrapJourney(be, journey, s, StopVisitState.UPCOMING)).orElse(null);
         List<StationDisplayData> stops = new ArrayList<>();
         if (journey != null) {
             for (StopSnapshot stop : journey.upcomingStops()) {
-                stops.add(wrapJourney(be, journey, stop, false));
+                stops.add(wrapJourney(be, journey, stop, StopVisitState.UPCOMING));
             }
         }
         // Cancellation is a property of the CALL, not of the train snapshot. A
@@ -67,33 +67,41 @@ public final class CrnDisplayAdapter {
         BasicTrainDisplayData basic = basic(train, null);
         TrainDisplayData.Stage stage = stage(be);
         boolean waiting = be.isWaitingAtStation();
-        StationDisplayData current = be.getCurrentStop().map(s -> wrapJourney(be, journey, s, true)).orElse(null);
+        StationDisplayData current = be.getCurrentStop().map(s -> wrapJourney(be, journey, s,
+            waiting ? StopVisitState.CURRENT : StopVisitState.UPCOMING)).orElse(null);
         // While the train STANDS at a station, be.getNextStop() is that same station
         // (getRemainingStops() starts at the current stop), so the following stop is
         // journey.nextStop(). While it is running, the current stop already IS the
         // station being approached, so be.getNextStop() is the right one.
         StationDisplayData next = waiting
-            ? (journey == null ? null : journey.nextStop().map(s -> wrapJourney(be, journey, s, false)).orElse(null))
-            : be.getNextStop().map(s -> wrapJourney(be, journey, s, false)).orElse(null);
-        // Route list = already-passed stops, then the stop the train occupies, then the
-        // rest up to the schedule's terminus.
+            ? (journey == null ? null : journey.nextStop().map(s -> wrapJourney(be, journey, s, StopVisitState.UPCOMING)).orElse(null))
+            : be.getNextStop().map(s -> wrapJourney(be, journey, s, StopVisitState.UPCOMING)).orElse(null);
+        // Route list = already-passed stops (greyed), then the forward stops up to the
+        // end of THIS timetable pass.
         //
         // - passedStops() are prepended so the renderer can grey them out.
         // - upcomingStops() begins at currentStopIndex, so it already contains the
-        //   current stop. While the train stands at a station it therefore supplied the
-        //   SAME stop that was prepended separately, which is what duplicated the
-        //   current station in the list.
-        // - On a non-cyclic schedule upcomingStops() stops at the terminus by itself, so
-        //   the route ends there without projecting the next timetable period. Only a
-        //   genuinely cyclic run wraps, and then only over one period.
+        //   station the train is at (dwelling) or approaching (running). Adding
+        //   currentStop() separately duplicated that station, so it is not added twice.
+        // - upcomingStops() returns a WHOLE CYCLE on a cyclic run ("wraps around and
+        //   covers one whole cycle"), which appended the next period's stations past
+        //   the terminus. Cut it to the remainder of the current pass.
         List<StationDisplayData> stops = new ArrayList<>();
         if (journey != null) {
             for (StopSnapshot passed : journey.passedStops()) {
-                stops.add(wrapJourney(be, journey, passed, false));
+                stops.add(wrapJourney(be, journey, passed, StopVisitState.PASSED));
             }
             List<StopSnapshot> upcoming = journey.upcomingStops();
-            for (int i = 0; i < upcoming.size(); i++) {
-                stops.add(wrapJourney(be, journey, upcoming.get(i), waiting && i == 0));
+            int remaining = Math.max(0, journey.stops().size() - journey.currentStopIndex());
+            int limit = Math.min(upcoming.size(), remaining);
+            for (int i = 0; i < limit; i++) {
+                // CURRENT only while the train actually STANDS at the stop. Between
+                // stations the first stop is the one being approached, and it must
+                // read as UPCOMING — otherwise the two states render identically.
+                StopVisitState vs = (waiting && i == 0)
+                    ? StopVisitState.CURRENT
+                    : StopVisitState.UPCOMING;
+                stops.add(wrapJourney(be, journey, upcoming.get(i), vs));
             }
         }
         return new TrainDisplayData(basic, stage, train.isCancelled(), waiting, current, next, stops);
@@ -136,8 +144,12 @@ public final class CrnDisplayAdapter {
      * which runs for the platform data source — so this synthetic branch is the
      * only path those displays use, and it has to derive everything from the
      * journey snapshot itself.</p>
+     * <p>The visit state is supplied by the caller rather than derived here:
+     * {@code JourneySnapshot.visitStateOf} reports CURRENT for the station the
+     * train is <em>approaching</em> as well as the one it stands at, so deriving
+     * it locally made "dwelling" and "travelling" render identically.</p>
      */
-    private static StationDisplayData wrapJourney(AdvancedDisplayBlockEntity be, JourneySnapshot journey, StopSnapshot stop, boolean current) {
+    private static StationDisplayData wrapJourney(AdvancedDisplayBlockEntity be, JourneySnapshot journey, StopSnapshot stop, StopVisitState visitState) {
         BoardEntry entry = be.getStops().stream().filter(x -> x.entryIndex() == stop.entryIndex()).findFirst().orElse(null);
         boolean borrowed = entry != null;
         if (entry == null) {
@@ -169,15 +181,10 @@ public final class CrnDisplayAdapter {
                 stop.sectionIndex(),
                 false, false, false, List.of(), List.of());
         }
-        // Ask the journey rather than comparing entryIndex (a schedule-entry index)
-        // with currentStopIndex (a position in the filtered stop list). Comparing two
-        // different index spaces reported passed stops as upcoming and never produced
-        // CURRENT, which also put the VIS "you are here" marker on the run's first stop.
-        StopVisitState visitState = current ? StopVisitState.CURRENT
-            : (journey == null ? StopVisitState.UPCOMING : journey.visitStateOf(stop));
+        StopVisitState state = visitState == null ? StopVisitState.UPCOMING : visitState;
         // Only a borrowed entry knows whether it is a terminus; a synthetic one is not.
-        boolean isLastStop = borrowed && entry.terminus() && !current;
-        return new StationDisplayData(entry, isLastStop, false, false, technical(entry), visitState);
+        boolean isLastStop = borrowed && entry.terminus() && state != StopVisitState.CURRENT;
+        return new StationDisplayData(entry, isLastStop, false, false, technical(entry), state);
     }
 
     private static boolean technical(BoardEntry entry) {
