@@ -2,10 +2,7 @@ package com.hybrizat.crndisplaynext.mixin;
 
 import com.hybrizat.crndisplaynext.CRNDisplayNextMod;
 import com.hybrizat.crndisplaynext.api.IAdvancedDisplayBEExt;
-import com.hybrizat.crndisplaynext.client.screen.GraphicsImageScreen;
-import com.hybrizat.crndisplaynext.display.settings.GraphicsDisplaySettings;
 import com.hybrizat.crndisplaynext.network.HideTechnicalStopsPacket;
-import com.simibubi.create.content.contraptions.AbstractContraptionEntity;
 import de.mrjulsen.crn.block.blockentity.AdvancedDisplayBlockEntity;
 import de.mrjulsen.crn.client.gui.widgets.ModularWidgetContainer;
 import de.mrjulsen.crn.client.gui.widgets.create.CreateButton;
@@ -17,11 +14,8 @@ import de.mrjulsen.mcdragonlib.client.gui.widgets.components.DLToggleButton;
 import de.mrjulsen.mcdragonlib.client.gui.widgets.components.DLTooltip;
 import de.mrjulsen.mcdragonlib.client.gui.widgets.layout.FlowLayout;
 import de.mrjulsen.mcdragonlib.util.TextUtils;
-import net.minecraft.client.Minecraft;
-import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
-import net.minecraft.world.level.block.entity.BlockEntity;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.Unique;
@@ -29,9 +23,20 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
-import java.lang.reflect.Field;
 import java.util.List;
 
+/**
+ * Adds the CRNDisplayNext "hide technical stops" checkbox to CRN's advanced
+ * display settings window.
+ *
+ * <p>The image-URL row for the custom image display is no longer injected here:
+ * it is built by {@code GraphicsDisplaySettings#buildGui} into CRN's own
+ * advanced-settings container, and its picker is a DragonLib modal window rather
+ * than a replacement vanilla screen. The previous injection opened a vanilla
+ * screen on top of the settings window and then reopened the settings window from
+ * that screen's close callback, which left a screen whose "previous screen" was
+ * the image screen itself — so the settings window could not be closed again.</p>
+ */
 @Mixin(value = AdvancedDisplaySettingsWindow.class, remap = false)
 public abstract class MixinAdvancedDisplaySettingsWindow extends DLWindow {
 
@@ -46,10 +51,37 @@ public abstract class MixinAdvancedDisplaySettingsWindow extends DLWindow {
 
     @Unique private static final String GUI_LINE_ID = "crndisplaynext.hide_technical_stops";
 
+    /**
+     * Height our extra settings row occupies, used to keep the window height correct.
+     *
+     * <p>{@code reinit()} recomputes the height from the container sizes BEFORE it
+     * calls {@code settings.buildGui(...)}, so the row added just above is not part
+     * of that sum and has to be accounted for here. The adjustment is idempotent:
+     * {@code reinit()} runs again on every expand/collapse, variant switch, paste and
+     * reset, and adding the row height unconditionally each time made the window grow
+     * without bound (the confirm and help buttons drifted away from the background).</p>
+     */
+    @Unique private static final int CRNDISPLAYNEXT_ROW_HEIGHT = CreateButton.HEIGHT + 2;
+
+    /** Cleared at the start of every {@code reinit()} so the row height is added once. */
+    @Unique private boolean crndisplaynext$rowHeightAdded = false;
+
     @Unique private static final MutableComponent TEXT_LABEL =
         TextUtils.translate("gui.crndisplaynext.hide_technical_stops");
     @Unique private static final Component TEXT_TOOLTIP =
         TextUtils.translate("gui.crndisplaynext.hide_technical_stops.description");
+
+    /**
+     * reinit() recomputes the window height from the container sizes BEFORE calling
+     * {@code settings.buildGui(...)}, so the row added at TAIL is not part of that sum.
+     * The flag lets the tail injection add it exactly once per reinit() instead of on
+     * every pass (reinit() runs again on expand/collapse, variant switch, paste and
+     * reset, and growing unconditionally let the window height run away).
+     */
+    @Inject(method = "reinit", at = @At("HEAD"), remap = false)
+    private void crndisplaynext$beginReinit(CallbackInfo ci) {
+        crndisplaynext$rowHeightAdded = false;
+    }
 
     @Inject(method = "reinit", at = @At("TAIL"), remap = false)
     private void onReinitTail(CallbackInfo ci) {
@@ -89,53 +121,10 @@ public abstract class MixinAdvancedDisplaySettingsWindow extends DLWindow {
 
         line.addComponent(checkBox);
 
-        // reinit() calls setHeight() BEFORE buildGui() adds any lines, so the window
-        // height doesn't account for our extra line. Add one line-height manually.
-        // CreateButton.HEIGHT = height of one settings row (same as all other checkboxes)
-        setHeight(height() + CreateButton.HEIGHT + 2);
-    }
-
-    // ── Image button ───────────────────────────────────────────────────
-
-    @Unique private static final String GFX_LINE = "crndisplaynext.gfx_button";
-
-    @Inject(method = "reinit", at = @At("TAIL"), remap = false)
-    private void addGfxButton(CallbackInfo ci) {
-        try {
-            Field sf = AdvancedDisplaySettingsWindow.class.getDeclaredField("settings");
-            sf.setAccessible(true);
-            if (!(sf.get(this) instanceof GraphicsDisplaySettings)) return;
-        } catch (Exception e) { return; }
-
-        DLPanel line = advancedSettingsContainer.addLine(GFX_LINE);
-        var btn = new de.mrjulsen.mcdragonlib.client.gui.widgets.components.DLButton(0, 0, 200, CreateButton.HEIGHT);
-        btn.text.set(Component.literal("Configure Image..."));
-        btn.addEventListener(de.mrjulsen.mcdragonlib.client.gui.events.DLGuiStandardEvents.ClickEvent.class,
-            (b, evt) -> {
-                BlockPos pos = ((BlockEntity)(Object)blockEntity).getBlockPos();
-                
-                // Get the contraption from the window's private field
-                final AbstractContraptionEntity[] contraptionHolder = new AbstractContraptionEntity[1];
-                try {
-                    Field cf = AdvancedDisplaySettingsWindow.class.getDeclaredField("contraption");
-                    cf.setAccessible(true);
-                    contraptionHolder[0] = (AbstractContraptionEntity) cf.get(this);
-                } catch (Exception e) {
-                    CRNDisplayNextMod.LOGGER.warn("[CRNExt] Failed to get contraption", e);
-                }
-                final AbstractContraptionEntity contraption = contraptionHolder[0];
-                
-                // Set callback to reopen this window when GraphicsImageScreen closes
-                GraphicsImageScreen.onCloseCallback = () -> {
-                    // Reopen this window with the correct contraption
-                    DLWindow.openWindow(mgr -> new AdvancedDisplaySettingsWindow(mgr, blockEntity, contraption));
-                };
-                
-                // Open the image settings screen
-                Minecraft.getInstance().setScreen(new GraphicsImageScreen(pos, null));
-                return false;
-            });
-        line.addComponent(btn);
-        setHeight(height() + CreateButton.HEIGHT + 2);
+        // Account for the row exactly once per reinit(); see crndisplaynext$beginReinit.
+        if (!crndisplaynext$rowHeightAdded) {
+            crndisplaynext$rowHeightAdded = true;
+            setHeight(height() + CRNDISPLAYNEXT_ROW_HEIGHT);
+        }
     }
 }

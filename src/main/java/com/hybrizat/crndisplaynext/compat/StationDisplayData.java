@@ -13,13 +13,26 @@ public final class StationDisplayData {
     private final boolean nextSectionExcluded;
     private final boolean prevSectionExcluded;
     private final boolean technicalStop;
+    /**
+     * Visit state to report. Normally the board entry's own, but a view built from a
+     * journey stop has to carry the state the journey computed for it — that is the
+     * only thing that can tell a passed stop from an upcoming one.
+     */
+    private final StopVisitState visitState;
 
     public StationDisplayData(BoardEntry entry, boolean lastStop, boolean nextSectionExcluded, boolean prevSectionExcluded, boolean technicalStop) {
+        this(entry, lastStop, nextSectionExcluded, prevSectionExcluded, technicalStop,
+             entry == null ? StopVisitState.UPCOMING : entry.visitState());
+    }
+
+    public StationDisplayData(BoardEntry entry, boolean lastStop, boolean nextSectionExcluded,
+                              boolean prevSectionExcluded, boolean technicalStop, StopVisitState visitState) {
         this.entry = entry;
         this.lastStop = lastStop;
         this.nextSectionExcluded = nextSectionExcluded;
         this.prevSectionExcluded = prevSectionExcluded;
         this.technicalStop = technicalStop;
+        this.visitState = visitState == null ? StopVisitState.UPCOMING : visitState;
     }
 
     public BoardEntry raw() { return entry; }
@@ -31,7 +44,7 @@ public final class StationDisplayData {
     public String getTrainName() { return entry.trainName(); }
     
     /** Get the visit state: PASSED, CURRENT, or UPCOMING */
-    public StopVisitState getVisitState() { return entry.visitState(); }
+    public StopVisitState getVisitState() { return visitState; }
 
     public ListOfStopovers getStopoversView() { return new ListOfStopovers(entry.stopovers().stream().map(StationRef::displayName).toList()); }
     public boolean isLastStop() { return lastStop; }

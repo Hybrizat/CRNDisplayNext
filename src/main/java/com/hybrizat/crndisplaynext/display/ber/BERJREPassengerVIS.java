@@ -209,14 +209,19 @@ public class BERJREPassengerVIS implements AbstractAdvancedDisplayRenderer<JREVI
         if (n == 0) return;
         Font nf = font(FONT_STOPS), tf = font(FONT_TIME);
 
-        // Find current stop index (the first stop with visitState == CURRENT, or if none, the first UPCOMING)
+        // Where the train is in the list. Passed stops sit in front of it, so the
+        // pointer belongs on the first stop that is not passed — NOT on index 0, which
+        // is a station the train has already left whenever it is between stations.
         int curr = 0;
         for (int i = 0; i < n; i++) {
-            if (stops.get(i).getVisitState() == de.mrjulsen.crn.api.core.StopVisitState.CURRENT) {
+            var vs = stops.get(i).getVisitState();
+            if (vs == de.mrjulsen.crn.api.core.StopVisitState.CURRENT) {
                 curr = i;
                 break;
-            } else if (stops.get(i).getVisitState() == de.mrjulsen.crn.api.core.StopVisitState.UPCOMING && i == 0) {
+            }
+            if (vs == de.mrjulsen.crn.api.core.StopVisitState.UPCOMING) {
                 curr = i;
+                break;
             }
         }
 
@@ -384,14 +389,26 @@ public class BERJREPassengerVIS implements AbstractAdvancedDisplayRenderer<JREVI
         g.fillRoundRect(l + sw, cy - vI, SW - l - r - 2*sw, 2*vI, bI, bI);
         int tT = UH + 120, tB = UH + 187, ew = SW - l - r;
         float spB = half > 1 ? (float)ew / (half - 1) : 0;
+        // The pointer marks the station the train is at or heading to, which is the
+        // first stop that is not passed (passed stops are rendered in grey in front of it).
+        int curIdx = 0;
+        for (int i = 0; i < n; i++) {
+            var vs = stops.get(i).getVisitState();
+            if (vs == de.mrjulsen.crn.api.core.StopVisitState.CURRENT
+                    || vs == de.mrjulsen.crn.api.core.StopVisitState.UPCOMING) {
+                curIdx = i;
+                break;
+            }
+        }
         for (int i = 0; i < half; i++) {
-            int cx = l + (int)(spB * i); boolean cur = (i == 0);
+            int cx = l + (int)(spB * i); boolean cur = (i == curIdx);
             marker(g, cx, tB, cur);
             var s = stops.get(i);
-            g.setFont(nf); g.setColor(cur ? DARK_BG : DARK_BG);
+            boolean passed = s.getVisitState() == de.mrjulsen.crn.api.core.StopVisitState.PASSED;
+            g.setFont(nf); g.setColor(passed ? PASSED_COLOR : DARK_BG);
             String nm = s.getRealTimeStation().displayName();
             drawVert(g, nm, nf, cx, tB+4);
-            if (!cur) eta(g, tf, s, cx, tB - 8);
+            if (!cur && !passed) eta(g, tf, s, cx, tB - 8);
         }
         int tn = n - half;
         if (tn > 0) {

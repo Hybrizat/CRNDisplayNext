@@ -6,6 +6,9 @@ import de.mrjulsen.crn.api.core.snapshot.JourneySnapshot;
 import de.mrjulsen.crn.api.core.snapshot.SectionSnapshot;
 import de.mrjulsen.crn.api.core.snapshot.StopSnapshot;
 import de.mrjulsen.crn.api.core.snapshot.TrainSnapshot;
+import de.mrjulsen.crn.api.core.ref.LineRef;
+import de.mrjulsen.crn.api.core.ref.StationRef;
+import de.mrjulsen.crn.api.core.ref.TrainCategoryRef;
 import de.mrjulsen.crn.api.core.StopVisitState;
 import de.mrjulsen.crn.block.blockentity.AdvancedDisplayBlockEntity;
 import de.mrjulsen.crn.util.TrainUtils;
@@ -36,14 +39,24 @@ public final class CrnDisplayAdapter {
         TrainDisplayData.Stage stage = stage(be);
         boolean waiting = be.isWaitingAtStation();
         StationDisplayData current = waiting ? new StationDisplayData(entry, entry.terminus(), entry.sectionChange(), false, technical(entry)) : null;
-        StationDisplayData next = be.getNextStop().map(s -> wrapJourney(be, journey, s, s == journey.currentStop().orElse(null))).orElse(null);
+        // "next" must be the stop FOLLOWING the current one. be.getNextStop() is the
+        // first of getRemainingStops(), which already starts at the current stop, so
+        // while the train stands at a station it would name the station it is at.
+        StationDisplayData next = journey == null ? null
+            : journey.nextStop().map(s -> wrapJourney(be, journey, s, false)).orElse(null);
         List<StationDisplayData> stops = new ArrayList<>();
         if (journey != null) {
             for (StopSnapshot stop : journey.upcomingStops()) {
                 stops.add(wrapJourney(be, journey, stop, false));
             }
         }
-        TrainDisplayData trainData = new TrainDisplayData(basic, stage, train == null || train.isCancelled(), waiting, current, next, stops);
+        // Cancellation is a property of the CALL, not of the train snapshot. A
+        // station/platform display has no trainSnapshot at all (CRN only fills it in
+        // contraptionTick, and only for TRAIN_INFORMATION/NONE sources), so deriving
+        // this from `train` marked every departure-board entry cancelled and the
+        // renderer's cancelled filter then threw away everything outside the display
+        // lead time.
+        TrainDisplayData trainData = new TrainDisplayData(basic, stage, entry.isCancelled(), waiting, current, next, stops);
         return new DisplayEntry(trainData, new StationDisplayData(entry, entry.terminus(), entry.sectionChange(), false, technical(entry)), entry.stopovers().stream().map(x -> x.displayName()).toList());
     }
 
@@ -55,65 +68,116 @@ public final class CrnDisplayAdapter {
         TrainDisplayData.Stage stage = stage(be);
         boolean waiting = be.isWaitingAtStation();
         StationDisplayData current = be.getCurrentStop().map(s -> wrapJourney(be, journey, s, true)).orElse(null);
-        StationDisplayData next = be.getNextStop().map(s -> wrapJourney(be, journey, s, false)).orElse(null);
+        // While the train STANDS at a station, be.getNextStop() is that same station
+        // (getRemainingStops() starts at the current stop), so the following stop is
+        // journey.nextStop(). While it is running, the current stop already IS the
+        // station being approached, so be.getNextStop() is the right one.
+        StationDisplayData next = waiting
+            ? (journey == null ? null : journey.nextStop().map(s -> wrapJourney(be, journey, s, false)).orElse(null))
+            : be.getNextStop().map(s -> wrapJourney(be, journey, s, false)).orElse(null);
+        // Route list = already-passed stops, then the stop the train occupies, then the
+        // rest up to the schedule's terminus.
+        //
+        // - passedStops() are prepended so the renderer can grey them out.
+        // - upcomingStops() begins at currentStopIndex, so it already contains the
+        //   current stop. While the train stands at a station it therefore supplied the
+        //   SAME stop that was prepended separately, which is what duplicated the
+        //   current station in the list.
+        // - On a non-cyclic schedule upcomingStops() stops at the terminus by itself, so
+        //   the route ends there without projecting the next timetable period. Only a
+        //   genuinely cyclic run wraps, and then only over one period.
         List<StationDisplayData> stops = new ArrayList<>();
         if (journey != null) {
-            // Include passed stops (already visited), current stop, and upcoming stops
-            // This provides the full route for passenger VIS displays
-            stops.addAll(journey.passedStops().stream().map(s -> wrapJourney(be, journey, s, false)).toList());
-            // Add current stop if train is at a station
-            journey.currentStop().ifPresent(s -> stops.add(wrapJourney(be, journey, s, true)));
-            // Add upcoming stops
-            stops.addAll(journey.upcomingStops().stream().map(s -> wrapJourney(be, journey, s, false)).toList());
+            for (StopSnapshot passed : journey.passedStops()) {
+                stops.add(wrapJourney(be, journey, passed, false));
+            }
+            List<StopSnapshot> upcoming = journey.upcomingStops();
+            for (int i = 0; i < upcoming.size(); i++) {
+                stops.add(wrapJourney(be, journey, upcoming.get(i), waiting && i == 0));
+            }
         }
         return new TrainDisplayData(basic, stage, train.isCancelled(), waiting, current, next, stops);
     }
 
     private static BasicTrainDisplayData basic(TrainSnapshot train, BoardEntry entry) {
-        if (train == null) return new BasicTrainDisplayData("", "", DLColor.TRANSPARENT, "", DLColor.TRANSPARENT, true);
-        String line = train.line().name();
-        String cat = train.category().name();
-        DLColor lc = train.line().color();
-        DLColor cc = train.category().color();
-        return new BasicTrainDisplayData(train.trainName(), cat, cc, line, lc, train.isCancelled());
+        // A station/platform display has no TrainSnapshot — CRN only fills that in
+        // contraptionTick for TRAIN_INFORMATION/NONE display sources — so the line and
+        // category shown in the train column have to come from the BoardEntry itself.
+        // Falling back to the (always null) snapshot left the column empty and forced
+        // the renderer to print "—" in place of every line name.
+        if (entry == null) {
+            return train == null
+                ? new BasicTrainDisplayData("", "", DLColor.TRANSPARENT, "", DLColor.TRANSPARENT, true)
+                : new BasicTrainDisplayData(train.trainName(), train.category().name(), train.category().color(),
+                                            train.line().name(), train.line().color(), train.isCancelled());
+        }
+        LineRef line = entry.line() == null ? LineRef.NONE : entry.line();
+        TrainCategoryRef category = entry.category() == null ? TrainCategoryRef.NONE : entry.category();
+        String trainName = entry.trainName();
+        if ((trainName == null || trainName.isBlank()) && train != null) {
+            trainName = train.trainName();
+        }
+        return new BasicTrainDisplayData(trainName, category.name(), category.color(),
+                                         line.name(), line.color(), entry.isCancelled());
     }
 
     private static TrainDisplayData.Stage stage(AdvancedDisplayBlockEntity be) {
-        return new TrainDisplayData.Stage(be.getStage().isOutOfService(), be.getStage().shouldNotBoard(true));
+        // Pass the hard (non-optional) terminus forms only: CRN evaluates
+        // shouldNotBoard(includeSoftTerminus) against the user's setting, so baking
+        // `true` in here made the "do not board" text appear even when it was off.
+        return new TrainDisplayData.Stage(be.getStage().isOutOfService(), be.getStage().shouldNotBoard(false));
     }
 
+    /**
+     * Wraps a journey stop as a legacy station view.
+     *
+     * <p>Train-information displays (front, side, VIS) never have a populated
+     * {@code be.getStops()} — CRN only fills that via {@code AdvancedDisplayTarget.prepare},
+     * which runs for the platform data source — so this synthetic branch is the
+     * only path those displays use, and it has to derive everything from the
+     * journey snapshot itself.</p>
+     */
     private static StationDisplayData wrapJourney(AdvancedDisplayBlockEntity be, JourneySnapshot journey, StopSnapshot stop, boolean current) {
         BoardEntry entry = be.getStops().stream().filter(x -> x.entryIndex() == stop.entryIndex()).findFirst().orElse(null);
+        boolean borrowed = entry != null;
         if (entry == null) {
             TrainSnapshot train = be.getTrain().orElse(null);
-            // Determine visit state based on stop index relative to current stop
-            boolean isPassed = journey != null && stop.entryIndex() < journey.currentStopIndex();
-            StopVisitState visitState = isPassed ? StopVisitState.PASSED : StopVisitState.UPCOMING;
+            // The destination is where the service is BOUND FOR, not the station being
+            // called at. Passing stop.station() here made every train display show the
+            // station the train is at or approaching as its 行先/destination.
+            StationRef destination = journey == null ? null
+                : journey.operatingSection(false).map(SectionSnapshot::destination).orElse(null);
             entry = new BoardEntry(
                 train == null ? java.util.UUID.randomUUID() : train.trainId(),
                 java.util.UUID.randomUUID(),
                 train == null ? "" : train.trainName(),
                 0,
-                train == null ? de.mrjulsen.crn.api.core.ref.LineRef.NONE : train.line(),
-                train == null ? de.mrjulsen.crn.api.core.ref.TrainCategoryRef.NONE : train.category(),
-                de.mrjulsen.crn.api.core.ref.LineRef.NONE,
-                de.mrjulsen.crn.api.core.ref.TrainCategoryRef.NONE,
+                train == null ? LineRef.NONE : train.line(),
+                train == null ? TrainCategoryRef.NONE : train.category(),
+                LineRef.NONE,
+                TrainCategoryRef.NONE,
                 stop.station(),
                 stop.scheduledStation(),
                 stop.station(),
                 stop.title(),
-                stop.station(),
+                destination == null ? stop.station() : destination,
                 stop.scheduled(),
                 stop.realtime(),
                 de.mrjulsen.crn.core.train.ServiceState.IDLE,
-                visitState,
+                StopVisitState.UPCOMING,
                 stop.entryIndex(),
                 stop.sectionIndex(),
                 false, false, false, List.of(), List.of());
         }
-        // For passed stops, mark as lastStop=false, for current/upcoming use the entry's terminus flag
-        boolean isLastStop = entry.terminus() && !current && (journey != null && stop.entryIndex() >= journey.currentStopIndex());
-        return new StationDisplayData(entry, isLastStop, false, false, technical(entry));
+        // Ask the journey rather than comparing entryIndex (a schedule-entry index)
+        // with currentStopIndex (a position in the filtered stop list). Comparing two
+        // different index spaces reported passed stops as upcoming and never produced
+        // CURRENT, which also put the VIS "you are here" marker on the run's first stop.
+        StopVisitState visitState = current ? StopVisitState.CURRENT
+            : (journey == null ? StopVisitState.UPCOMING : journey.visitStateOf(stop));
+        // Only a borrowed entry knows whether it is a terminus; a synthetic one is not.
+        boolean isLastStop = borrowed && entry.terminus() && !current;
+        return new StationDisplayData(entry, isLastStop, false, false, technical(entry), visitState);
     }
 
     private static boolean technical(BoardEntry entry) {

@@ -34,9 +34,16 @@ public record FetchImagePayload(BlockPos pos, String url) implements CustomPacke
     @Override public Type<? extends CustomPacketPayload> type() { return TYPE; }
 
     public static void handle(FetchImagePayload p, IPayloadContext ctx) {
+        // INFO so an ordinary log shows whether the packet reaches the server at all;
+        // the client-side request that leads here is rate-limited, so this cannot flood.
+        CRNDisplayNextMod.LOGGER.info("[FetchImg] request from {} for {} at {}",
+            ctx.player().getName().getString(), p.url(), p.pos());
         ctx.enqueueWork(() -> {
             var server = ctx.player().getServer();
-            if (server == null) return;
+            if (server == null) {
+                CRNDisplayNextMod.LOGGER.warn("[FetchImg] no server for {}", p.url());
+                return;
+            }
             if (!ImageUrlPolicy.isPlausibleImageUrl(p.url())) {
                 CRNDisplayNextMod.LOGGER.warn("[FetchImg] rejected non-image URL from {}: {}",
                     ctx.player().getName().getString(), p.url());
@@ -72,6 +79,9 @@ public record FetchImagePayload(BlockPos pos, String url) implements CustomPacke
     }
 
     public static void request(BlockPos pos, String url) {
+        // Diagnostic: proves how often the client actually asks. If this appears
+        // thousands of times a second, the caller's in-flight guard is broken.
+        CRNDisplayNextMod.LOGGER.info("[FetchImg] client requesting {} at {}", url, pos);
         PacketDistributor.sendToServer(new FetchImagePayload(pos, url));
     }
 }

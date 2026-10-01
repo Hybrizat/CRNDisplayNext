@@ -2,7 +2,7 @@ package com.hybrizat.crndisplaynext.network;
 
 import com.hybrizat.crndisplaynext.CRNDisplayNextMod;
 import com.hybrizat.crndisplaynext.client.ImageReassembler;
-import com.hybrizat.crndisplaynext.client.screen.GraphicsImageScreen;
+import com.hybrizat.crndisplaynext.client.screen.GraphicsImageWindow;
 import com.hybrizat.crndisplaynext.display.ber.BERJREGraphics;
 import io.netty.buffer.ByteBuf;
 import net.minecraft.core.BlockPos;
@@ -40,7 +40,7 @@ public record ImageDataPayload(BlockPos pos, int seq, int total, byte[] chunk) i
             byte[] full = ImageReassembler.onChunk(key, p.seq(), p.total(), p.chunk());
             if (full == null) return; // more chunks still expected
             BERJREGraphics.onImageData(p.pos(), full);
-            GraphicsImageScreen.onImageData(p.pos(), full);
+            GraphicsImageWindow.onImageData(p.pos(), full);
         });
     }
 }

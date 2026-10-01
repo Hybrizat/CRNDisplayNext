@@ -9,7 +9,6 @@ import de.mrjulsen.crn.block.properties.ETimeDisplay;
 import de.mrjulsen.crn.client.ber.AdvancedDisplayRenderInstance;
 import de.mrjulsen.crn.client.ber.variants.AbstractAdvancedDisplayRenderer;
 import de.mrjulsen.crn.client.lang.CustomLanguage;
-import de.mrjulsen.crn.config.ModServerConfig;
 import com.hybrizat.crndisplaynext.compat.ETrainStopState;
 import com.hybrizat.crndisplaynext.compat.BasicTrainDisplayData;
 import com.hybrizat.crndisplaynext.compat.DisplayEntry;
@@ -128,12 +127,17 @@ public abstract class AbstractJRERenderer<S extends AbstractJRESettings>
         // trains only until scheduledDeparture + LEAD_TIME.
         // Note: deliberately NO "departing soon" time window (BERPlatformSimple
         // behavior) — the board lists all upcoming departures at this station.
-        long now = ModUtils.getTransformedWorldTime();
+        // Cancellation handling is deliberately NOT repeated here.
+        //
+        // CRN's AdvancedDisplayTarget.prepare already builds the board with
+        // BoardQuery.withCancelled(true) and filters it through
+        // ITrainStopTypeSetting.accepts, which is exactly the rule that used to be
+        // copied below ("keep cancelled trains only until scheduled departure plus
+        // DISPLAY_LEAD_TIME"). Keeping a second copy meant the two could disagree, and
+        // this copy read isCancelled() off a TrainSnapshot that station and platform
+        // displays never have — so it treated every departure as cancelled and threw
+        // away the whole board outside the lead-time window.
         lastDepartures = com.hybrizat.crndisplaynext.compat.CrnDisplayAdapter.board(be).stream()
-            .filter(x -> !x.isNextSectionExcluded())
-            .filter(x -> !x.getTrainData().isCancelled()
-                || now < x.getStationData().getScheduledDepartureTime()
-                         + ModServerConfig.DISPLAY_LEAD_TIME.get())
             .limit(maxRows)
             .collect(Collectors.toList());
 

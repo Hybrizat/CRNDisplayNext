@@ -76,5 +76,10 @@ desktop.ini
 memory.md
 
 # ── Local Gradle cache used for reproducible builds ──
+# .gu is a workspace-local GRADLE_USER_HOME (dependency cache copy) and .gp the
+# project cache, used because the DSH sandbox cannot write the real ~/.gradle.
 .gradle-user/
+.gu/
+.gp/
+build-verify/
 

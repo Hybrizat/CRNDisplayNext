@@ -179,7 +179,7 @@ public class BERJRESide implements AbstractAdvancedDisplayRenderer<JRESideSettin
 
             // Right bottom: "次は ○○"
             String nextStopName = com.hybrizat.crndisplaynext.compat.CrnDisplayAdapter.train(be).getNextStop().isPresent()
-                ? com.hybrizat.crndisplaynext.compat.CrnDisplayAdapter.train(be).getNextStop().get().getRealTimeStation().tagName() : "";
+                ? com.hybrizat.crndisplaynext.compat.CrnDisplayAdapter.train(be).getNextStop().get().getRealTimeStation().displayName() : "";
             String prefix = loc(KEY_NEXT, "次は ");
             nextLabel.text.set(TextUtils.text(prefix + nextStopName));
             nextLabel.position.set(Point.of(bX, h * 0.6f - 1f));

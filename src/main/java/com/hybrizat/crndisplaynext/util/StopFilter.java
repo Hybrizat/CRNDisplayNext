@@ -71,11 +71,23 @@ public final class StopFilter {
 
     public static boolean isTechnicalStop(BoardEntry entry) {
         try {
-            long arrival   = entry.scheduled().arrival();
-            long departure = entry.scheduled().departure();
+            var scheduled = entry.scheduled();
+
+            // Unknown times must never be treated as a technical stop.
+            //
+            // StopTimes.UNKNOWN is (-1, -1, -1), so a naive departure - arrival
+            // yields 0 and every entry whose timetable could not be resolved would
+            // be silently deleted for anyone who enabled this option. Unknown means
+            // "no information", not "no dwell time".
+            if (!scheduled.isKnown()) {
+                return false;
+            }
+
+            long arrival   = scheduled.arrival();
+            long departure = scheduled.departure();
             long dwell     = departure - arrival;
 
-            // Filter ALL dwell=0 entries — no exceptions.
+            // Filter ALL known dwell=0 entries — no exceptions.
             //
             // Do NOT guard on isLastStop() or isNextSectionExcluded():
             // turnaround stops (the ones we want to remove) are exactly

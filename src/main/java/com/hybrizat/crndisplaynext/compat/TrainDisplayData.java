@@ -35,7 +35,21 @@ public final class TrainDisplayData {
     public java.util.List<StationDisplayData> getStopsFromCurrentStation() { return stopsFromCurrentStation; }
 
     public record Stage(boolean outOfService, boolean shouldNotBoard) {
-        public boolean isIrregular(boolean includeSoftTerminus) { return outOfService; }
-        public boolean shouldNotBoard(boolean includeSoftTerminus) { return shouldNotBoard; }
+        /**
+         * Mirrors CRN's {@code TrainJourneyStage.isIrregular(boolean)}:
+         * {@code shouldNotBoard(includeSoftTerminus) || isOutOfService()}.
+         *
+         * <p>Returning only {@code outOfService} here disabled the whole
+         * "do not board" path: a train sitting at or announcing its terminus is not
+         * out of service, so callers took the normal route branch and the
+         * configured do-not-board text never appeared.</p>
+         */
+        public boolean isIrregular(boolean includeSoftTerminus) {
+            return shouldNotBoard || outOfService;
+        }
+
+        public boolean shouldNotBoard(boolean includeSoftTerminus) {
+            return shouldNotBoard;
+        }
     }
 }

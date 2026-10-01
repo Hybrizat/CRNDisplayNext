@@ -31,7 +31,7 @@ public record CacheListPayload(List<String> entries) implements CustomPacketPayl
 
     public static void handle(CacheListPayload p, IPayloadContext ctx) {
         ctx.enqueueWork(() -> {
-            com.hybrizat.crndisplaynext.client.screen.GraphicsImageScreen.onCacheData(p.entries());
+            com.hybrizat.crndisplaynext.client.screen.GraphicsImageWindow.onCacheData(p.entries());
         });
     }
 }

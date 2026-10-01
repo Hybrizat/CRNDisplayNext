@@ -66,7 +66,6 @@ public class BERJREGraphics implements AbstractAdvancedDisplayRenderer<GraphicsD
     private static final Map<Long, String> failedUrls = new ConcurrentHashMap<>();
     /** If the server hasn't replied within this window, stop retrying (and log). */
     private static final long FETCH_TIMEOUT_MS = 5000L;
-    private static Level lastLevel;
 
     private static final int P = 16;
     private static final float M = 2f;
@@ -83,7 +82,13 @@ public class BERJREGraphics implements AbstractAdvancedDisplayRenderer<GraphicsD
         var be = graphics.blockEntity();
         if (!be.isController()) { logThrottled("[Gfx] render: not controller"); return; }
 
-        if (be.getLevel() != lastLevel) { closeAll(); lastLevel = be.getLevel(); }
+        // NOTE: there used to be a `if (be.getLevel() != lastLevel) closeAll();` guard
+        // here. closeAll() wipes holders AND pendingUrls, and be.getLevel() is not
+        // stable for contraption-mounted displays, so the guard fired continuously and
+        // destroyed the in-flight marker on every frame. putIfAbsent then always
+        // returned null, so every frame re-sent the fetch and the request never
+        // completed — a 4600-request-per-10s storm with no image ever arriving.
+        // Reclamation is already handled properly by the activity-based cleanup().
 
         var facing = be.getBlockState().getValue(HorizontalDirectionalBlock.FACING);
         var cfg = getDisplaySettings(be);
@@ -219,13 +224,5 @@ public class BERJREGraphics implements AbstractAdvancedDisplayRenderer<GraphicsD
             Entry e = holders.get(key);
             if (e != null && now - e.lastActive >= STALE_AFTER_TICKS) release(key);
         }
-    }
-
-    private static void closeAll() {
-        for (var e : holders.values()) e.holder.close();
-        holders.clear();
-        pendingUrls.clear();
-        failedUrls.clear();
-        ImageReassembler.clear();
     }
 }
