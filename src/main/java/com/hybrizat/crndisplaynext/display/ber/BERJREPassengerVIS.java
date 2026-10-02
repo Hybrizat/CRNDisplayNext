@@ -102,7 +102,13 @@ public class BERJREPassengerVIS implements AbstractAdvancedDisplayRenderer<JREVI
         if (!be.isController()) return;
         long key = be.getBlockPos().asLong();
         Entry entry = H.get(key);
-        if (entry != null && entry.be != be) entry.be = be; // chunk reload - canvas survives
+        if (entry != null && entry.be != be) {
+            // Chunk reload: the block entity was recreated. The canvas survived, but
+            // it still holds the pre-reload layout — repaint it against the new
+            // block entity so the route arrangement does not stay stale.
+            entry.be = be;
+            repaint(entry, be, be.getLevel());
+        }
         entry = H.get(key);
         if (entry == null || !entry.holder.isReady()) return;
         entry.touch();
@@ -129,6 +135,24 @@ public class BERJREPassengerVIS implements AbstractAdvancedDisplayRenderer<JREVI
             H.put(k, entry);
         }
         entry.touch();
+        var holder = entry.holder;
+        repaint(entry, be, lv);
+    }
+
+    /**
+     * Rebuilds the whole canvas from live data.
+     *
+     * <p>Shared by the normal update path and by the chunk-reload rebind: the canvas
+     * is keyed by block position and deliberately survives a block-entity
+     * recreation, but it then still holds the layout from before the reload. Without
+     * repainting here the display kept showing the old route arrangement — e.g. a
+     * two-row layout when the remaining stops now fit on one row — until something
+     * else triggered a CRN update (opening the settings and confirming).</p>
+     */
+    private void repaint(Entry entry, AdvancedDisplayBlockEntity be, Level lv) {
+        var cfg = getDisplaySettings(be);
+        cw = be.getXSizeScaled() * 16;
+        ch = be.getYSizeScaled() * 16;
         var holder = entry.holder;
         holder.resize(SW, SH);
         BufferedImage img = new BufferedImage(SW, SH, BufferedImage.TYPE_INT_RGB);
@@ -178,9 +202,14 @@ public class BERJREPassengerVIS implements AbstractAdvancedDisplayRenderer<JREVI
         if (dest.isBlank() && !stops.isEmpty())
             dest = stops.get(stops.size() - 1).getRealTimeStation().displayName();
 
-        // Station name: next stop (matches BERJRESide pattern)
-        String stnName = d.getNextStop().map(s -> s.getRealTimeStation().displayName())
-            .orElse(stops.get(0).getRealTimeStation().displayName());
+        // Station name must agree with prefix(): "ただいま" names the station the train is
+        // standing at, "次は" names the one it is heading for. Always using the next
+        // stop made a dwelling train read "ただいま <次站>".
+        StationDisplayData named = d.isWaitingAtStation() ? d.getCurrentStop().orElse(null) : null;
+        if (named == null) named = d.getNextStop().orElse(null);
+        String stnName = named != null
+            ? named.getRealTimeStation().displayName()
+            : stops.get(0).getRealTimeStation().displayName();
 
         UPPER.render(g, new UpperLCDRenderer.Model(
             dest,
@@ -332,16 +361,12 @@ public class BERJREPassengerVIS implements AbstractAdvancedDisplayRenderer<JREVI
             }
         }
 
-        // Pointer pentagon (draw_ptr — right-pointing pentagon + halo).
-        // JR East: while the train STANDS at a station the pointer sits ON that
-        // station's cell; while it is RUNNING it sits on the boundary between the
-        // station it left and the one it is approaching. That offset is what makes
-        // "dwelling" and "travelling" tell apart at a glance.
-        int ptrCellLeft = x + (curr % perLine) * stopsW;
-        if (!dwelling) {
-            ptrCellLeft = Math.max(x, ptrCellLeft - stopsW / 2);
+        // Pointer pentagon (draw_ptr) marks the station the train is STOPPING at.
+        // It is only meaningful while dwelling, so it is suppressed while running
+        // rather than being dragged onto the station ahead.
+        if (dwelling) {
+            drawPtrPentagon(g, x + (curr % perLine) * stopsW, y + hLine * 1, barH);
         }
-        drawPtrPentagon(g, ptrCellLeft, y + hLine * 1, barH);
 
         // Travel times inside bars (draw_times) - only for upcoming stations
         for (int i = 0; i < n; i++) {
@@ -415,13 +440,12 @@ public class BERJREPassengerVIS implements AbstractAdvancedDisplayRenderer<JREVI
             }
         }
         for (int i = 0; i < half; i++) {
-            boolean cur = (i == curIdx);
-            // JR East: the pointer sits on the station while dwelling and on the
-            // boundary towards it while running.
-            int markerX = dwelling ? l + (int)(spB * i) : Math.max(l, l + (int)(spB * i) - (int)(spB / 2));
-            marker(g, markerX, tB, cur);
-            var s = stops.get(i);
+            // The red pentagon only marks a station the train is stopping at, so it is
+            // suppressed while running (the plain circle is drawn instead).
+            boolean cur = dwelling && (i == curIdx);
             int cx = l + (int)(spB * i);
+            marker(g, cx, tB, cur);
+            var s = stops.get(i);
             boolean passed = s.getVisitState() == de.mrjulsen.crn.api.core.StopVisitState.PASSED;
             g.setFont(nf); g.setColor(passed ? PASSED_COLOR : DARK_BG);
             String nm = s.getRealTimeStation().displayName();
