@@ -201,6 +201,12 @@ public class BERJREPassengerVIS implements AbstractAdvancedDisplayRenderer<JREVI
         holder.copyFromBuffered(img);
         holder.upload();
         holder.markReady();
+        // Diagnostic: the display quad is sized from cw/ch while the canvas is always
+        // SW x SH. If the two aspects disagree badly the content is squashed or
+        // repeated, so record both whenever a repaint actually happens.
+        CRNDisplayNextMod.LOGGER.info("[VIS] repaint at {} canvas={}x{} quad={}x{} size={}x{} type={}",
+            be.getBlockPos(), SW, SH, cw - 4, ch - 4,
+            be.getXSizeScaled(), be.getYSizeScaled(), be.getDisplayType());
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
