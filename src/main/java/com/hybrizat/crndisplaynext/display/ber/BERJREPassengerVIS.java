@@ -179,33 +179,6 @@ public class BERJREPassengerVIS implements AbstractAdvancedDisplayRenderer<JREVI
         return !be.connectable(getter, self, self.relative(forward));
     }
 
-    /** Number of display blocks this one actually owns, walking down. */
-    private static int ownedRows(AdvancedDisplayBlockEntity be, Level lv) {
-        BlockPos self = be.getBlockPos();
-        int rows = 1;
-        for (int i = 1; i <= AdvancedDisplayBlockEntity.MAX_YSIZE; i++) {
-            BlockPos below = self.below(i);
-            if (!(lv.getBlockEntity(below) instanceof AdvancedDisplayBlockEntity peer)) break;
-            if (peer.getDisplayType() == null || !peer.getDisplayType().equals(be.getDisplayType())) break;
-            rows++;
-        }
-        return rows;
-    }
-
-    /** Number of display blocks this one owns horizontally, walking backwards. */
-    private static int ownedCols(AdvancedDisplayBlockEntity be, Level lv) {
-        Direction back = be.getBlockState().getValue(HorizontalDirectionalBlock.FACING).getClockWise().getOpposite();
-        BlockPos self = be.getBlockPos();
-        int cols = 1;
-        for (int i = 1; i <= AdvancedDisplayBlockEntity.MAX_XSIZE; i++) {
-            BlockPos p = self.relative(back, i);
-            if (!(lv.getBlockEntity(p) instanceof AdvancedDisplayBlockEntity peer)) break;
-            if (peer.getDisplayType() == null || !peer.getDisplayType().equals(be.getDisplayType())) break;
-            cols++;
-        }
-        return cols;
-    }
-
     /**
      * Client-side controller election for displays riding a contraption.
      *
@@ -227,45 +200,22 @@ public class BERJREPassengerVIS implements AbstractAdvancedDisplayRenderer<JREVI
      */
     private static boolean yieldsToPeerController(AdvancedDisplayBlockEntity be, Level lv) {
         if (lv == null || !lv.isClientSide()) return false;
-        CRNDisplayNextMod.LOGGER.info("[VIS] owner? at {} -> {} (aboveConn={} fwdConn={}) lv={}",
-            be.getBlockPos(), isDisplayOwner(be, lv),
-            be.connectable(new LevelBlockGetter(lv), be.getBlockPos(), be.getBlockPos().above()),
-            be.connectable(new LevelBlockGetter(lv), be.getBlockPos(),
-                be.getBlockPos().relative(be.getBlockState().getValue(HorizontalDirectionalBlock.FACING).getClockWise())),
-            lv.getClass().getSimpleName());
         return !isDisplayOwner(be, lv);
     }
 
     /**
-     * Sizes the quad to the blocks this one actually owns.
+     * Sizes the quad from the size the block entity itself declares.
      *
-     * <p>A correctly merged display already reports the full size in its NBT, so this
-     * is a no-op there. A materialised display never got merged, so every block still
-     * carries the single-block size; without scaling to the real extent the owner
-     * would only cover its own cell and leave the rest of the panel blank.</p>
+     * <p>Probing neighbouring blocks does NOT work for a materialised display: its
+     * block entities sit at contraption-local coordinates while {@code getLevel()}
+     * returns the plain {@link ClientLevel}, so every neighbour lookup returned
+     * {@code null} and a measured extent collapsed to 1x1 (rendering a 16x16 quad
+     * instead of 48x32). CRN exposes no contraption-aware size query, so the declared
+     * size is the only trustworthy source.</p>
      */
     private void applyOwnedExtent(AdvancedDisplayBlockEntity be, Level lv) {
-        int cols = lv == null ? be.getXSize() : ownedCols(be, lv);
-        int rows = lv == null ? be.getYSize() : ownedRows(be, lv);
-        cw = be.getXSizeScaled() * 16 * cols / Math.max(1, be.getXSize());
-        ch = be.getYSizeScaled() * 16 * rows / Math.max(1, be.getYSize());
-        // TEMP diagnostic
-        StringBuilder sb = new StringBuilder();
-        for (Direction d : Direction.Plane.HORIZONTAL) {
-            for (int i = 1; i <= 3; i++) {
-                BlockPos p = be.getBlockPos().relative(d, i);
-                sb.append(' ').append(d).append(i).append('=')
-                  .append(lv.getBlockEntity(p) == null ? "null" : lv.getBlockEntity(p).getClass().getSimpleName());
-            }
-        }
-        for (int i = 1; i <= 2; i++) {
-            BlockPos p = be.getBlockPos().below(i);
-            sb.append(" DOWN").append(i).append('=')
-              .append(lv.getBlockEntity(p) == null ? "null" : lv.getBlockEntity(p).getClass().getSimpleName());
-        }
-        CRNDisplayNextMod.LOGGER.info("[VIS] extent at {} declared={}x{} owned={}x{} quad={}x{} lv={} peers:{}",
-            be.getBlockPos(), be.getXSize(), be.getYSize(), cols, rows, cw, ch,
-            lv.getClass().getSimpleName(), sb);
+        cw = be.getXSizeScaled() * 16;
+        ch = be.getYSizeScaled() * 16;
     }
 
     @Override public void render(BERGraphics<AdvancedDisplayBlockEntity> g, float pt,
