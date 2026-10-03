@@ -43,6 +43,8 @@ public class CRNDisplayNextMod {
 
     private void clientSetup(FMLClientSetupEvent event) {
         net.neoforged.neoforge.common.NeoForge.EVENT_BUS.addListener(TextureHolderSweeper::onLevelTick);
+        net.neoforged.neoforge.common.NeoForge.EVENT_BUS.addListener(
+            com.hybrizat.crndisplaynext.client.DisplayScanner::onLevelTick);
         event.enqueueWork(() -> {
             FontLoader.init(Minecraft.getInstance().gameDirectory);
             LOGGER.info("CRN Display Native Extended: client setup complete.");
