@@ -23,6 +23,7 @@ import de.mrjulsen.mcdragonlib.util.DLColor;
 import de.mrjulsen.mcdragonlib.util.time.DLTime;
 import de.mrjulsen.mcdragonlib.util.time.TimeContext;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.HorizontalDirectionalBlock;
 import net.minecraft.world.level.block.state.BlockState;
@@ -108,7 +109,7 @@ public class BERJREPassengerVIS implements AbstractAdvancedDisplayRenderer<JREVI
         if (++resyncCounter >= RESYNC_INTERVAL_TICKS) {
             resyncCounter = 0;
             Entry cur = H.get(pos.asLong());
-            if (cur != null) {
+            if (cur != null && !yieldsToPeerController(be, lv)) {
                 cur.touch();
                 String sig = signature(be);
                 if (!sig.equals(cur.sig)) {
@@ -133,10 +134,83 @@ public class BERJREPassengerVIS implements AbstractAdvancedDisplayRenderer<JREVI
         return sb.toString();
     }
 
+    /**
+     * Minimal {@link de.mrjulsen.crn.block.IBlockGetter} view of a Level.
+     *
+     * <p>{@code connectable} only reads block states and block entities; the mutating
+     * methods are client-inert. Needed because a materialised display's BE reports a
+     * contraption-backed level that does not itself implement CRN's interface.</p>
+     */
+    private record LevelBlockGetter(Level level) implements de.mrjulsen.crn.block.IBlockGetter {
+        @Override public BlockState getBlockState(BlockPos pos) { return level.getBlockState(pos); }
+        @Override public net.minecraft.world.level.block.entity.BlockEntity getBlockEntity(BlockPos pos) {
+            return level.getBlockEntity(pos);
+        }
+        @Override public boolean isClientSide() { return true; }
+        @Override public void updateBlockEntity(com.simibubi.create.foundation.blockEntity.SmartBlockEntity be,
+                                               BlockPos pos) { /* client: no-op */ }
+        @Override public void updateBlockState(BlockState state, BlockPos pos) { /* client: no-op */ }
+    }
+
+    /**
+     * Client-side controller election for displays riding a contraption.
+     *
+     * <p>CRN only recomputes which block of a display owns rendering
+     * ({@code updateControllerStatus2}) from {@code lazyTick()}, which is the
+     * in-level block-entity path. A display mounted on a train ticks via
+     * {@code contraptionTick}, which never calls it — so after materialising a
+     * multi-block display EVERY block keeps {@code isController() == true} and each
+     * paints a complete canvas, showing one full copy of the layout per block.
+     * Block-mounted displays are unaffected, which is why only the contraption case
+     * splits.</p>
+     *
+     * <p>We cannot mutate CRN's flag from the renderer, so instead every claimant
+     * asks CRN's own {@code connectable()} whether a lower-numbered claimant belongs
+     * to the same display; if so this block yields. The lowest coordinate is always
+     * elected, so the choice is deterministic and stable.</p>
+     *
+     * @return true when this block should not draw because a peer does.
+     */
+    private static boolean yieldsToPeerController(AdvancedDisplayBlockEntity be, Level lv) {
+        if (lv == null || !lv.isClientSide()) return false;
+        de.mrjulsen.crn.block.IBlockGetter getter = new LevelBlockGetter(lv);
+        BlockPos self = be.getBlockPos();
+        // Same block class, same display type and mutually connectable is exactly what
+        // CRN's merge considers a single display.
+        BlockPos.MutableBlockPos p = new BlockPos.MutableBlockPos();
+        for (Direction d : Direction.Plane.HORIZONTAL) {
+            p.set(self);
+            for (int step = 1; step <= AdvancedDisplayBlockEntity.MAX_XSIZE; step++) {
+                p.set(self.relative(d, step));
+                if (!(lv.getBlockEntity(p) instanceof AdvancedDisplayBlockEntity peer)) break;
+                if (!peer.isController() || peer.getDisplayType() == null
+                        || !peer.getDisplayType().equals(be.getDisplayType())) break;
+                if (be.connectable(getter, self, p) && be.connectable(getter, p, self)) {
+                    if (p.asLong() < self.asLong()) return true; // a peer wins
+                    break;                                          // we are the lowest
+                }
+                break;
+            }
+        }
+        for (int down = 1; down <= AdvancedDisplayBlockEntity.MAX_YSIZE; down++) {
+            BlockPos below = self.below(down);
+            if (!(lv.getBlockEntity(below) instanceof AdvancedDisplayBlockEntity peer)) break;
+            if (!peer.isController() || peer.getDisplayType() == null
+                    || !peer.getDisplayType().equals(be.getDisplayType())) break;
+            if (be.connectable(getter, self, below) && be.connectable(getter, below, self)) {
+                if (below.asLong() < self.asLong()) return true;
+                break;
+            }
+            break;
+        }
+        return false;
+    }
+
     @Override public void render(BERGraphics<AdvancedDisplayBlockEntity> g, float pt,
                                   AdvancedDisplayRenderInstance p, int l, boolean bs) {
         var be = g.blockEntity();
         if (!be.isController()) return;
+        if (yieldsToPeerController(be, be.getLevel())) return;
         long key = be.getBlockPos().asLong();
         Entry entry = H.get(key);
         if (entry != null && entry.be != be) {
@@ -160,6 +234,9 @@ public class BERJREPassengerVIS implements AbstractAdvancedDisplayRenderer<JREVI
                                   AdvancedDisplayBlockEntity be,
                                   AdvancedDisplayRenderInstance p, EUpdateReason r) {
         if (!be.isController()) return;
+        // Materialised displays keep isController() on every block (CRN only recomputes
+        // it from lazyTick), so elect a single owner before allocating any canvas.
+        if (yieldsToPeerController(be, lv)) return;
         var cfg = getDisplaySettings(be);
         cw = be.getXSizeScaled() * 16;
         ch = be.getYSizeScaled() * 16;
