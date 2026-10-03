@@ -227,6 +227,12 @@ public class BERJREPassengerVIS implements AbstractAdvancedDisplayRenderer<JREVI
      */
     private static boolean yieldsToPeerController(AdvancedDisplayBlockEntity be, Level lv) {
         if (lv == null || !lv.isClientSide()) return false;
+        CRNDisplayNextMod.LOGGER.info("[VIS] owner? at {} -> {} (aboveConn={} fwdConn={}) lv={}",
+            be.getBlockPos(), isDisplayOwner(be, lv),
+            be.connectable(new LevelBlockGetter(lv), be.getBlockPos(), be.getBlockPos().above()),
+            be.connectable(new LevelBlockGetter(lv), be.getBlockPos(),
+                be.getBlockPos().relative(be.getBlockState().getValue(HorizontalDirectionalBlock.FACING).getClockWise())),
+            lv.getClass().getSimpleName());
         return !isDisplayOwner(be, lv);
     }
 
@@ -243,6 +249,23 @@ public class BERJREPassengerVIS implements AbstractAdvancedDisplayRenderer<JREVI
         int rows = lv == null ? be.getYSize() : ownedRows(be, lv);
         cw = be.getXSizeScaled() * 16 * cols / Math.max(1, be.getXSize());
         ch = be.getYSizeScaled() * 16 * rows / Math.max(1, be.getYSize());
+        // TEMP diagnostic
+        StringBuilder sb = new StringBuilder();
+        for (Direction d : Direction.Plane.HORIZONTAL) {
+            for (int i = 1; i <= 3; i++) {
+                BlockPos p = be.getBlockPos().relative(d, i);
+                sb.append(' ').append(d).append(i).append('=')
+                  .append(lv.getBlockEntity(p) == null ? "null" : lv.getBlockEntity(p).getClass().getSimpleName());
+            }
+        }
+        for (int i = 1; i <= 2; i++) {
+            BlockPos p = be.getBlockPos().below(i);
+            sb.append(" DOWN").append(i).append('=')
+              .append(lv.getBlockEntity(p) == null ? "null" : lv.getBlockEntity(p).getClass().getSimpleName());
+        }
+        CRNDisplayNextMod.LOGGER.info("[VIS] extent at {} declared={}x{} owned={}x{} quad={}x{} lv={} peers:{}",
+            be.getBlockPos(), be.getXSize(), be.getYSize(), cols, rows, cw, ch,
+            lv.getClass().getSimpleName(), sb);
     }
 
     @Override public void render(BERGraphics<AdvancedDisplayBlockEntity> g, float pt,
