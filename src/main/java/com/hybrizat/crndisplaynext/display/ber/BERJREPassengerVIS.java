@@ -406,7 +406,7 @@ public class BERJREPassengerVIS implements AbstractAdvancedDisplayRenderer<JREVI
         } else {
             // Running: a green arrow on the boundary, pointing at the station the
             // train is bound for (JR East).
-            drawTravelArrow(g, Math.max(x, x + (curr % perLine) * stopsW - TRAVEL_ARROW_W), y + hLine * 1, barH);
+            drawTravelArrow(g, Math.max(x, x + (curr % perLine) * stopsW - TRAVEL_ARROW_W), y + hLine * 1, barH, rc);
         }
 
         // Travel times inside bars (draw_times) - only for upcoming stations
@@ -514,16 +514,29 @@ public class BERJREPassengerVIS implements AbstractAdvancedDisplayRenderer<JREVI
     // ═══════════════════════════════════════════════════════════════════════════
 
     private static final int TRAVEL_ARROW_W = 18;
+    /** Two arrow colours, picked against the ribbon so the arrow is never invisible. */
+    private static final Color ARROW_DARK_RED = new Color(139, 24, 24);
+    private static final Color ARROW_DARK_GREEN = new Color(27, 106, 20);
 
     /**
-     * Green right-pointing arrow drawn on the boundary between the station the train
-     * left and the station it is approaching, per the JR East layout. Only shown while
-     * running; the red pentagon is used while dwelling instead.
+     * The travel arrow must stay visible against the route ribbon, whose colour is the
+     * line/category colour and therefore arbitrary. Two fixed variants are swapped by
+     * hue: a green ribbon gets the dark red arrow and anything else the dark green one.
      */
-    private void drawTravelArrow(Graphics2D g, int leftX, int barY, int barH) {
+    private static Color arrowColorFor(Color ribbon) {
+        boolean greenish = ribbon.getGreen() >= ribbon.getRed() && ribbon.getGreen() >= ribbon.getBlue();
+        return greenish ? ARROW_DARK_RED : ARROW_DARK_GREEN;
+    }
+
+    /**
+     * Green/dark right-pointing arrow drawn on the boundary between the station the
+     * train left and the station it is approaching, per the JR East layout. Only shown
+     * while running; the red pentagon is used while dwelling instead.
+     */
+    private void drawTravelArrow(Graphics2D g, int leftX, int barY, int barH, Color ribbon) {
         int midY = barY + barH / 2;
         int notch = TRAVEL_ARROW_W - 9;
-        g.setColor(GREEN);
+        g.setColor(arrowColorFor(ribbon));
         g.fillPolygon(
             new int[]{leftX, leftX + notch, leftX + TRAVEL_ARROW_W, leftX + notch, leftX},
             new int[]{barY, barY, midY, barY + barH, barY + barH}, 5);
