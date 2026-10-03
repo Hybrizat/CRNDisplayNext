@@ -68,6 +68,8 @@ public class BERJREPassengerVIS implements AbstractAdvancedDisplayRenderer<JREVI
         AdvancedDisplayBlockEntity be; // re-bindable: same display, new BE after chunk reload
         final DynamicTextureHolder holder;
         int lastActive;
+        /** Signature of the data the canvas was last painted from. */
+        String sig = "";
 
         Entry(AdvancedDisplayBlockEntity be, DynamicTextureHolder holder) {
             this.be = be;
@@ -83,6 +85,9 @@ public class BERJREPassengerVIS implements AbstractAdvancedDisplayRenderer<JREVI
     private Page page = Page.FULL_ROUTE;
     private long pageStart;
     private int cw = 16, ch = 16;
+    /** Ticks between data-signature checks that can trigger a repaint. */
+    private int resyncCounter;
+    private static final int RESYNC_INTERVAL_TICKS = 5;
 
     @Override public void tick(Level lv, BlockPos pos, BlockState st,
                                 AdvancedDisplayBlockEntity be, AdvancedDisplayRenderInstance p) {
@@ -94,6 +99,38 @@ public class BERJREPassengerVIS implements AbstractAdvancedDisplayRenderer<JREVI
             page = (page == Page.FULL_ROUTE) ? Page.FIVE_STATION : Page.FULL_ROUTE;
             pageStart = t;
         }
+        // Self-heal: repaint whenever the data behind the canvas no longer matches
+        // what it was painted from. The canvas is cached by position and deliberately
+        // survives block-entity recreation, so it can otherwise keep an arrangement
+        // from before a reload (e.g. a two-row route where the remaining stops now fit
+        // one row) until some unrelated CRN update happens to fire. Repainting on a
+        // data change makes the display converge no matter how it was reloaded.
+        if (++resyncCounter >= RESYNC_INTERVAL_TICKS) {
+            resyncCounter = 0;
+            Entry cur = H.get(pos.asLong());
+            if (cur != null) {
+                cur.touch();
+                String sig = signature(be);
+                if (!sig.equals(cur.sig)) {
+                    cur.sig = sig;
+                    cur.be = be;
+                    repaint(cur, be, lv);
+                }
+            }
+        }
+    }
+
+    /** Cheap fingerprint of everything the canvas is drawn from. */
+    private static String signature(AdvancedDisplayBlockEntity be) {
+        TrainDisplayData d = com.hybrizat.crndisplaynext.compat.CrnDisplayAdapter.train(be);
+        if (d == null) return "-";
+        var stops = d.getStopsFromCurrentStation();
+        StringBuilder sb = new StringBuilder();
+        sb.append(d.isWaitingAtStation() ? 'W' : 'R').append(stops.size()).append('|');
+        for (var s : stops) {
+            sb.append(s.getRealTimeStation().displayName()).append('/');
+        }
+        return sb.toString();
     }
 
     @Override public void render(BERGraphics<AdvancedDisplayBlockEntity> g, float pt,
@@ -135,7 +172,7 @@ public class BERJREPassengerVIS implements AbstractAdvancedDisplayRenderer<JREVI
             H.put(k, entry);
         }
         entry.touch();
-        var holder = entry.holder;
+        entry.sig = signature(be);
         repaint(entry, be, lv);
     }
 
@@ -366,6 +403,10 @@ public class BERJREPassengerVIS implements AbstractAdvancedDisplayRenderer<JREVI
         // rather than being dragged onto the station ahead.
         if (dwelling) {
             drawPtrPentagon(g, x + (curr % perLine) * stopsW, y + hLine * 1, barH);
+        } else {
+            // Running: a green arrow on the boundary, pointing at the station the
+            // train is bound for (JR East).
+            drawTravelArrow(g, Math.max(x, x + (curr % perLine) * stopsW - TRAVEL_ARROW_W), y + hLine * 1, barH);
         }
 
         // Travel times inside bars (draw_times) - only for upcoming stations
@@ -471,6 +512,22 @@ public class BERJREPassengerVIS implements AbstractAdvancedDisplayRenderer<JREVI
     // ═══════════════════════════════════════════════════════════════════════════
     //  Primitives
     // ═══════════════════════════════════════════════════════════════════════════
+
+    private static final int TRAVEL_ARROW_W = 18;
+
+    /**
+     * Green right-pointing arrow drawn on the boundary between the station the train
+     * left and the station it is approaching, per the JR East layout. Only shown while
+     * running; the red pentagon is used while dwelling instead.
+     */
+    private void drawTravelArrow(Graphics2D g, int leftX, int barY, int barH) {
+        int midY = barY + barH / 2;
+        int notch = TRAVEL_ARROW_W - 9;
+        g.setColor(GREEN);
+        g.fillPolygon(
+            new int[]{leftX, leftX + notch, leftX + TRAVEL_ARROW_W, leftX + notch, leftX},
+            new int[]{barY, barY, midY, barY + barH, barY + barH}, 5);
+    }
 
     private void marker(Graphics2D g, int cx, int cy, boolean cur) {
         if (cur) {
