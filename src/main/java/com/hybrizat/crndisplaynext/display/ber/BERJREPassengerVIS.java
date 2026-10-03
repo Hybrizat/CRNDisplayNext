@@ -33,7 +33,7 @@ import java.awt.*;
 import java.awt.image.BufferedImage;
 import java.util.*;
 import java.util.List;
-import java.util.concurrent.ConcurrentHashMap;
+import java.util.IdentityHashMap;
 
 /**
  * JRE Passenger VIS — E235-0 replica.
@@ -82,7 +82,7 @@ public class BERJREPassengerVIS implements AbstractAdvancedDisplayRenderer<JREVI
     }
     /** A display is considered dead after this many ticks without renderer activity. */
     static final int STALE_AFTER_TICKS = 200;
-    private static final Map<Long, Entry> H = new ConcurrentHashMap<>();
+    private static final Map<AdvancedDisplayBlockEntity, Entry> H = new IdentityHashMap<>();
     private Page page = Page.FULL_ROUTE;
     private long pageStart;
     private int cw = 16, ch = 16;
@@ -93,7 +93,7 @@ public class BERJREPassengerVIS implements AbstractAdvancedDisplayRenderer<JREVI
     @Override public void tick(Level lv, BlockPos pos, BlockState st,
                                 AdvancedDisplayBlockEntity be, AdvancedDisplayRenderInstance p) {
         if (!be.isController()) return;
-        Entry e = H.get(pos.asLong());
+        Entry e = H.get(be);
         if (e != null && e.be == be) e.touch();
         long t = ModUtils.getTransformedWorldTime();
         if (t - pageStart >= getDisplaySettings(be).getPageIntervalSecs() * 20L) {
@@ -108,8 +108,8 @@ public class BERJREPassengerVIS implements AbstractAdvancedDisplayRenderer<JREVI
         // data change makes the display converge no matter how it was reloaded.
         if (++resyncCounter >= RESYNC_INTERVAL_TICKS) {
             resyncCounter = 0;
-            Entry cur = H.get(pos.asLong());
-            if (cur != null && !yieldsToPeerController(be, lv)) {
+            Entry cur = H.get(be);
+            if (cur != null) {
                 cur.touch();
                 String sig = signature(be);
                 if (!sig.equals(cur.sig)) {
@@ -135,75 +135,6 @@ public class BERJREPassengerVIS implements AbstractAdvancedDisplayRenderer<JREVI
     }
 
     /**
-     * Minimal {@link de.mrjulsen.crn.block.IBlockGetter} view of a Level.
-     *
-     * <p>{@code connectable} only reads block states and block entities; the mutating
-     * methods are client-inert. Needed because a materialised display's BE reports a
-     * contraption-backed level that does not itself implement CRN's interface.</p>
-     */
-    private record LevelBlockGetter(Level level) implements de.mrjulsen.crn.block.IBlockGetter {
-        @Override public BlockState getBlockState(BlockPos pos) { return level.getBlockState(pos); }
-        @Override public net.minecraft.world.level.block.entity.BlockEntity getBlockEntity(BlockPos pos) {
-            return level.getBlockEntity(pos);
-        }
-        @Override public boolean isClientSide() { return true; }
-        @Override public void updateBlockEntity(com.simibubi.create.foundation.blockEntity.SmartBlockEntity be,
-                                               BlockPos pos) { /* client: no-op */ }
-        @Override public void updateBlockState(BlockState state, BlockPos pos) { /* client: no-op */ }
-    }
-
-    /**
-     * Client-side controller election for displays riding a contraption.
-     *
-     * <p>CRN only recomputes which block of a display owns rendering
-     * ({@code updateControllerStatus2}) from {@code lazyTick()}, which is the
-     * in-level block-entity path. A display mounted on a train ticks via
-     * {@code contraptionTick}, which never calls it — so after materialising a
-     * multi-block display EVERY block keeps {@code isController() == true} and each
-     * paints a complete canvas, showing one full copy of the layout per block.
-     * Block-mounted displays are unaffected, which is why only the contraption case
-     * splits.</p>
-     *
-     /**
-     * CRN picks the block that owns rendering in {@code updateControllerStatus2} as the
-     * one that can connect to neither its forward neighbour nor the block above; that
-     * block then spans the display backwards and downwards. Reproducing exactly that
-     * choice keeps our anchor identical to a correctly merged block-mounted display.
-     */
-    private static boolean isDisplayOwner(AdvancedDisplayBlockEntity be, Level lv) {
-        if (lv == null) return true;
-        de.mrjulsen.crn.block.IBlockGetter getter = new LevelBlockGetter(lv);
-        BlockPos self = be.getBlockPos();
-        if (be.connectable(getter, self, self.above())) return false;
-        Direction forward = be.getBlockState().getValue(HorizontalDirectionalBlock.FACING).getClockWise();
-        return !be.connectable(getter, self, self.relative(forward));
-    }
-
-    /**
-     * Client-side controller election for displays riding a contraption.
-     *
-     * <p>CRN only recomputes which block of a display owns rendering
-     * ({@code updateControllerStatus2}) from {@code lazyTick()}, which is the
-     * in-level block-entity path. A display mounted on a train ticks via
-     * {@code contraptionTick}, which never calls it — so after materialising a
-     * multi-block display EVERY block keeps {@code isController() == true} and each
-     * paints a complete canvas, showing one full copy of the layout per block.
-     * Block-mounted displays are unaffected, which is why only the contraption case
-     * splits.</p>
-     *
-     * <p>We cannot mutate CRN's flag from the renderer, so each claimant instead
-     * applies CRN's own ownership rule ({@link #isDisplayOwner}). Only the owner
-     * draws, and it spans the whole display, so the result matches what a correctly
-     * merged block-mounted display looks like.</p>
-     *
-     * @return true when this block should not draw because the owner does.
-     */
-    private static boolean yieldsToPeerController(AdvancedDisplayBlockEntity be, Level lv) {
-        if (lv == null || !lv.isClientSide()) return false;
-        return !isDisplayOwner(be, lv);
-    }
-
-    /**
      * Sizes the quad from the size the block entity itself declares.
      *
      * <p>Probing neighbouring blocks does NOT work for a materialised display: its
@@ -222,18 +153,11 @@ public class BERJREPassengerVIS implements AbstractAdvancedDisplayRenderer<JREVI
                                   AdvancedDisplayRenderInstance p, int l, boolean bs) {
         var be = g.blockEntity();
         if (!be.isController()) return;
-        if (yieldsToPeerController(be, be.getLevel())) return;
-        long key = be.getBlockPos().asLong();
-        Entry entry = H.get(key);
-        if (entry != null && entry.be != be) {
-            // Chunk reload: the block entity was recreated. The canvas survived, but
-            // it still holds the pre-reload layout — repaint it against the new
-            // block entity so the route arrangement does not stay stale.
-            entry.be = be;
+        applyOwnedExtent(be, be.getLevel());
+        Entry entry = H.get(be);
+        if (entry != null) {
             applyOwnedExtent(be, be.getLevel());
-            repaint(entry, be, be.getLevel());
         }
-        entry = H.get(key);
         if (entry == null || !entry.holder.isReady()) return;
         entry.touch();
         RenderUtils.renderTexture(entry.holder.getId(), g,
@@ -247,18 +171,12 @@ public class BERJREPassengerVIS implements AbstractAdvancedDisplayRenderer<JREVI
                                   AdvancedDisplayBlockEntity be,
                                   AdvancedDisplayRenderInstance p, EUpdateReason r) {
         if (!be.isController()) return;
-        // Materialised displays keep isController() on every block (CRN only recomputes
-        // it from lazyTick), so elect a single owner before allocating any canvas.
-        if (yieldsToPeerController(be, lv)) return;
         var cfg = getDisplaySettings(be);
         applyOwnedExtent(be, lv);
-        long k = be.getBlockPos().asLong();
-        Entry entry = H.get(k);
-        if (entry != null && entry.be != be) entry.be = be; // chunk reload - canvas survives
-        entry = H.get(k);
+        Entry entry = H.get(be);
         if (entry == null) {
             entry = new Entry(be, new DynamicTextureHolder(SW, SH));
-            H.put(k, entry);
+            H.put(be, entry);
         }
         entry.touch();
         entry.sig = signature(be);
@@ -702,11 +620,11 @@ public class BERJREPassengerVIS implements AbstractAdvancedDisplayRenderer<JREVI
      */
     public static void cleanup() {
         int now = TextureHolderSweeper.clientTicks;
-        for (long key : new ArrayList<>(H.keySet())) {
+        for (AdvancedDisplayBlockEntity key : new ArrayList<>(H.keySet())) {
             Entry e = H.get(key);
             if (e != null && now - e.lastActive >= STALE_AFTER_TICKS) release(key);
         }
     }
 
-    public static void release(long key) { var e = H.remove(key); if (e != null) e.holder.close(); }
+    public static void release(AdvancedDisplayBlockEntity key) { var e = H.remove(key); if (e != null) e.holder.close(); }
 }
