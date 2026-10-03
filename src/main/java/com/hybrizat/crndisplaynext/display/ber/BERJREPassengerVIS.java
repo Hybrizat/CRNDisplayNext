@@ -8,6 +8,7 @@ import com.hybrizat.crndisplaynext.client.FontLoader;
 import com.hybrizat.crndisplaynext.display.renderer.UpperLCDRenderer;
 import com.hybrizat.crndisplaynext.display.renderer.LayoutConfig;
 import com.hybrizat.crndisplaynext.display.settings.JREVISSettings;
+import de.mrjulsen.crn.block.AbstractAdvancedDisplayBlock;
 import de.mrjulsen.crn.block.blockentity.AdvancedDisplayBlockEntity;
 import de.mrjulsen.crn.block.blockentity.AdvancedDisplayBlockEntity.EUpdateReason;
 import de.mrjulsen.crn.client.ber.AdvancedDisplayRenderInstance;
@@ -23,6 +24,7 @@ import de.mrjulsen.mcdragonlib.util.DLColor;
 import de.mrjulsen.mcdragonlib.util.time.DLTime;
 import de.mrjulsen.mcdragonlib.util.time.TimeContext;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.HorizontalDirectionalBlock;
 import net.minecraft.world.level.block.state.BlockState;
@@ -133,10 +135,46 @@ public class BERJREPassengerVIS implements AbstractAdvancedDisplayRenderer<JREVI
         return sb.toString();
     }
 
+    /**
+     * The origin block of a merged display: the controller sits at the start of the
+     * axis the display extends along ({@code getClockWise()}), so walking the other
+     * way from any of its blocks until a non-display block is reached finds it.
+     * Returns null when this is a single-block display.
+     */
+    private static BlockPos displayOrigin(AdvancedDisplayBlockEntity be, Level lv) {
+        if (lv == null || (be.getXSize() <= 1 && be.getYSize() <= 1)) return null;
+        BlockState st = be.getBlockState();
+        if (!(st.getBlock() instanceof AbstractAdvancedDisplayBlock)) return null;
+        Direction axis = st.getValue(AbstractAdvancedDisplayBlock.FACING).getClockWise();
+        BlockPos.MutableBlockPos p = be.getBlockPos().mutable();
+        int limit = AdvancedDisplayBlockEntity.MAX_XSIZE + AdvancedDisplayBlockEntity.MAX_YSIZE;
+        for (int i = 0; i < limit; i++) {
+            BlockPos prev = p.relative(axis.getOpposite());
+            if (!(lv.getBlockState(prev).getBlock() instanceof AbstractAdvancedDisplayBlock)) break;
+            p.set(prev);
+        }
+        return p.immutable();
+    }
+
+    /**
+     * CRN can report EVERY block of a merged display as controller after a chunk
+     * reload — {@code lazyTick()}, which refreshes that flag, is server-side only — and
+     * each such block then paints its own complete canvas, so a 2-block display shows
+     * two full copies. This suppresses a block only when another block at the computed
+     * origin also claims to be the controller, so a healthy display (exactly one
+     * claimant) keeps rendering exactly as before.
+     */
+    private static boolean duplicateClaimant(AdvancedDisplayBlockEntity be, Level lv) {
+        BlockPos origin = displayOrigin(be, lv);
+        if (origin == null || origin.equals(be.getBlockPos())) return false;
+        return lv.getBlockEntity(origin) instanceof AdvancedDisplayBlockEntity ob && ob.isController();
+    }
+
     @Override public void render(BERGraphics<AdvancedDisplayBlockEntity> g, float pt,
                                   AdvancedDisplayRenderInstance p, int l, boolean bs) {
         var be = g.blockEntity();
         if (!be.isController()) return;
+        if (duplicateClaimant(be, be.getLevel())) return;
         long key = be.getBlockPos().asLong();
         Entry entry = H.get(key);
         if (entry != null && entry.be != be) {
