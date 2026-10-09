@@ -154,11 +154,21 @@ public final class CrnDisplayAdapter {
         boolean borrowed = entry != null;
         if (entry == null) {
             TrainSnapshot train = be.getTrain().orElse(null);
-            // The destination is where the service is BOUND FOR, not the station being
-            // called at. Passing stop.station() here made every train display show the
-            // station the train is at or approaching as its 行先/destination.
-            StationRef destination = journey == null ? null
-                : journey.operatingSection(false).map(SectionSnapshot::destination).orElse(null);
+            // The destination is where the service is BOUND FOR — the terminus of the WHOLE
+            // timetable, not the endpoint of the currently operated section.
+            // operatingSection() tracks the section the train is currently on, and
+            // early in an A-B-C-D run it can resolve to a wrapped section (D->A),
+            // whose endpoint is A — so the display named the ORIGIN as its terminus.
+            // The last entry of the journey's stop list is the timetable terminus.
+            StationRef destination = null;
+            if (journey != null) {
+                List<StopSnapshot> all = journey.stops();
+                if (!all.isEmpty()) destination = all.get(all.size() - 1).station();
+                if (destination == null) {
+                    destination = journey.operatingSection(false)
+                        .map(SectionSnapshot::destination).orElse(null);
+                }
+            }
             entry = new BoardEntry(
                 train == null ? java.util.UUID.randomUUID() : train.trainId(),
                 java.util.UUID.randomUUID(),
