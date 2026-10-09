@@ -154,21 +154,11 @@ public final class CrnDisplayAdapter {
         boolean borrowed = entry != null;
         if (entry == null) {
             TrainSnapshot train = be.getTrain().orElse(null);
-            // The destination is where the service is BOUND FOR — the terminus of the WHOLE
-            // timetable, not the endpoint of the currently operated section.
-            // operatingSection() tracks the section the train is currently on, and
-            // early in an A-B-C-D run it can resolve to a wrapped section (D->A),
-            // whose endpoint is A — so the display named the ORIGIN as its terminus.
-            // The last entry of the journey's stop list is the timetable terminus.
-            StationRef destination = null;
-            if (journey != null) {
-                List<StopSnapshot> all = journey.stops();
-                if (!all.isEmpty()) destination = all.get(all.size() - 1).station();
-                if (destination == null) {
-                    destination = journey.operatingSection(false)
-                        .map(SectionSnapshot::destination).orElse(null);
-                }
-            }
+            // Destination shown for a train is the endpoint of the SECTION the train is
+            // operating — not the last stop of the whole timetable. A-B-C-D rendered as
+            // one section names D correctly, while a multi-section journey must name the
+            // current section's endpoint.
+            StationRef destination = displayTerminus(journey, stop);
             entry = new BoardEntry(
                 train == null ? java.util.UUID.randomUUID() : train.trainId(),
                 java.util.UUID.randomUUID(),
@@ -195,6 +185,55 @@ public final class CrnDisplayAdapter {
         // Only a borrowed entry knows whether it is a terminus; a synthetic one is not.
         boolean isLastStop = borrowed && entry.terminus() && state != StopVisitState.CURRENT;
         return new StationDisplayData(entry, isLastStop, false, false, technical(entry), state);
+    }
+
+    /**
+     * Destination shown by train displays (front, side, VIS): the endpoint of the
+     * section the train is currently operating.
+     *
+     * <p>Two rules matter here:</p>
+     * <ul>
+     *   <li>It is the <em>section</em> endpoint, not the whole timetable's last stop.
+     *       A-B-C-D run as one section names D; a multi-section journey names the
+     *       section being operated.</li>
+     *   <li>The section must be the one containing where the train is, without CRN's
+     *       "previous section at a section start" adjustment
+     *       ({@code operatingSection(false)}). At the journey's first stop that
+     *       adjustment resolves to the previous run's final section, whose endpoint is
+     *       the ORIGIN — which made A-B-C-D display A instead of D.</li>
+     * </ul>
+     */
+    private static StationRef displayTerminus(JourneySnapshot journey, StopSnapshot stop) {
+        if (journey == null) return null;
+        // 直通区段 (through-service group) override: when the operating section belongs
+        // to a through-service group, the displayed destination becomes that group's
+        // final endpoint instead of the plain section endpoint. The grouping model is
+        // not finalised yet, so this hook currently yields null.
+        StationRef throughGroupEnd = throughGroupTerminus(journey, stop);
+        if (throughGroupEnd != null) return throughGroupEnd;
+
+        // operatingSection(true) keeps the section containing the current stop and only
+        // falls back to the previous section when the current one is unusable.
+        return journey.operatingSection(true).map(SectionSnapshot::destination).orElseGet(
+            () -> journey.operatingSection(false).map(SectionSnapshot::destination).orElse(null));
+    }
+
+    /**
+     * Reserved for the 直通区段 (through-service) feature.
+     *
+     * <p>A through-service group is a logical grouping of consecutive CRN sections that
+     * the same train runs through without ending its service. When the operating
+     * section is inside such a group, displays must name the group's FINAL endpoint —
+     * i.e. the {@code destination} of the group's last section, skipping blacklisted
+     * stations and falling back to the last visible one — rather than the endpoint of
+     * the individual section.</p>
+     *
+     * <p>Return {@code null} here to show the plain section endpoint. Implemented
+     * once the grouping model (section index ranges, blacklisting rules, interaction
+     * with {@code includesNextSection_start}) is settled.</p>
+     */
+    private static StationRef throughGroupTerminus(JourneySnapshot journey, StopSnapshot stop) {
+        return null;
     }
 
     private static boolean technical(BoardEntry entry) {
