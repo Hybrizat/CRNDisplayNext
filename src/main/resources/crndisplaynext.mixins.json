@@ -4,13 +4,8 @@
   "package": "com.hybrizat.crndisplaynext.mixin",
   "compatibilityLevel": "JAVA_21",
   "refmap": "crndisplaynext.refmap.json",
-  "mixins": [
-    "MixinAdvancedDisplayBE",
-    "MixinStationDisplayPrepare"
-  ],
-  "client": [
-    "MixinAdvancedDisplaySettingsWindow"
-  ],
+  "mixins": [],
+  "client": [],
   "injectors": {
     "defaultRequire": 1
   }

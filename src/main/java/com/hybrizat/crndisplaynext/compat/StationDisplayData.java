@@ -12,7 +12,6 @@ public final class StationDisplayData {
     private final boolean lastStop;
     private final boolean nextSectionExcluded;
     private final boolean prevSectionExcluded;
-    private final boolean technicalStop;
     /**
      * Visit state to report. Normally the board entry's own, but a view built from a
      * journey stop has to carry the state the journey computed for it — that is the
@@ -20,18 +19,17 @@ public final class StationDisplayData {
      */
     private final StopVisitState visitState;
 
-    public StationDisplayData(BoardEntry entry, boolean lastStop, boolean nextSectionExcluded, boolean prevSectionExcluded, boolean technicalStop) {
-        this(entry, lastStop, nextSectionExcluded, prevSectionExcluded, technicalStop,
+    public StationDisplayData(BoardEntry entry, boolean lastStop, boolean nextSectionExcluded, boolean prevSectionExcluded) {
+        this(entry, lastStop, nextSectionExcluded, prevSectionExcluded,
              entry == null ? StopVisitState.UPCOMING : entry.visitState());
     }
 
     public StationDisplayData(BoardEntry entry, boolean lastStop, boolean nextSectionExcluded,
-                              boolean prevSectionExcluded, boolean technicalStop, StopVisitState visitState) {
+                              boolean prevSectionExcluded, StopVisitState visitState) {
         this.entry = entry;
         this.lastStop = lastStop;
         this.nextSectionExcluded = nextSectionExcluded;
         this.prevSectionExcluded = prevSectionExcluded;
-        this.technicalStop = technicalStop;
         this.visitState = visitState == null ? StopVisitState.UPCOMING : visitState;
     }
 
@@ -50,7 +48,6 @@ public final class StationDisplayData {
     public boolean isLastStop() { return lastStop; }
     public boolean isNextSectionExcluded() { return nextSectionExcluded; }
     public boolean isPrevSectionExcluded() { return prevSectionExcluded; }
-    public boolean isTechnicalStop() { return technicalStop; }
 
     public static final class ListOfStopovers {
         private final java.util.List<String> values;

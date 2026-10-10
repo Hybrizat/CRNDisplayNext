@@ -3,7 +3,6 @@
 Create: Train Navigator Display Native Extended is an add-on mod for [Create: Train Navigator](https://github.com/MisterJulsen/Create-Train-Navigator).
 
 ## Features
-- **Hide Technical Stops**: For turn-back schedules (A-B-C-||-C-B-A), stops with a dwell time of 0 are hidden, allowing the display to show correctly (C→B instead of C→C).
 - **New Display Format**: JR East-style platform departure boards, VIS and destination indicators.
 
 ---

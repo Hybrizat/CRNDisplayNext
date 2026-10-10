@@ -9,7 +9,6 @@ import com.hybrizat.crndisplaynext.network.FetchImagePayload;
 import com.hybrizat.crndisplaynext.network.ImageDataPayload;
 import com.hybrizat.crndisplaynext.network.GraphicsUrlPayload;
 import com.hybrizat.crndisplaynext.network.RequestCachePayload;
-import com.hybrizat.crndisplaynext.network.HideTechnicalStopsPacket;
 import net.neoforged.bus.api.IEventBus;
 import net.neoforged.fml.ModContainer;
 import net.neoforged.fml.common.Mod;
@@ -51,8 +50,6 @@ public class CRNDisplayNextMod {
 
     private void registerPayloads(RegisterPayloadHandlersEvent event) {
         final PayloadRegistrar registrar = event.registrar(MOD_ID);
-        registrar.playToServer(HideTechnicalStopsPacket.TYPE,
-            HideTechnicalStopsPacket.STREAM_CODEC, HideTechnicalStopsPacket::handle);
         registrar.playToServer(RequestCachePayload.TYPE,
             RequestCachePayload.CODEC, RequestCachePayload::handle);
         registrar.playToServer(GraphicsUrlPayload.TYPE,

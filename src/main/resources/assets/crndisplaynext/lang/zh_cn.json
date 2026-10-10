@@ -1,6 +1,4 @@
 {
-  "gui.crndisplaynext.hide_technical_stops": "隐藏技术停车",
-  "gui.crndisplaynext.hide_technical_stops.description": "隐藏停站时长为0的站点。适用于折返时刻表（A-B-C-||-C-B-A），列车在终点站折返时不对旅客开放。",
   "gui.crndisplaynext.image_url": "图片地址",
   "gui.crndisplaynext.image_url.description": "显示在该屏幕上的图片直链，须为 http(s) 且带主机名。由服务端下载并缓存；图片可随时修改，包括列车已实体化时。",
   "gui.crndisplaynext.image_url.browse": "浏览…",

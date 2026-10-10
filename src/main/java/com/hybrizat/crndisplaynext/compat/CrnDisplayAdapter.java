@@ -38,7 +38,7 @@ public final class CrnDisplayAdapter {
         BasicTrainDisplayData basic = basic(train, entry);
         TrainDisplayData.Stage stage = stage(be);
         boolean waiting = be.isWaitingAtStation();
-        StationDisplayData current = waiting ? new StationDisplayData(entry, entry.terminus(), entry.sectionChange(), false, technical(entry)) : null;
+        StationDisplayData current = waiting ? new StationDisplayData(entry, entry.terminus(), entry.sectionChange(), false) : null;
         // "next" must be the stop FOLLOWING the current one. be.getNextStop() is the
         // first of getRemainingStops(), which already starts at the current stop, so
         // while the train stands at a station it would name the station it is at.
@@ -57,7 +57,7 @@ public final class CrnDisplayAdapter {
         // renderer's cancelled filter then threw away everything outside the display
         // lead time.
         TrainDisplayData trainData = new TrainDisplayData(basic, stage, entry.isCancelled(), waiting, current, next, stops);
-        return new DisplayEntry(trainData, new StationDisplayData(entry, entry.terminus(), entry.sectionChange(), false, technical(entry)), entry.stopovers().stream().map(x -> x.displayName()).toList());
+        return new DisplayEntry(trainData, new StationDisplayData(entry, entry.terminus(), entry.sectionChange(), false), entry.stopovers().stream().map(x -> x.displayName()).toList());
     }
 
     public static TrainDisplayData train(AdvancedDisplayBlockEntity be) {
@@ -184,24 +184,26 @@ public final class CrnDisplayAdapter {
         StopVisitState state = visitState == null ? StopVisitState.UPCOMING : visitState;
         // Only a borrowed entry knows whether it is a terminus; a synthetic one is not.
         boolean isLastStop = borrowed && entry.terminus() && state != StopVisitState.CURRENT;
-        return new StationDisplayData(entry, isLastStop, false, false, technical(entry), state);
+        return new StationDisplayData(entry, isLastStop, false, false, state);
     }
 
     /**
-     * Destination shown by train displays (front, side, VIS): the endpoint of the
-     * section the train is currently operating.
+     * Destination shown by train displays (front, side, VIS). Three cases, in order:
      *
-     * <p>Two rules matter here:</p>
-     * <ul>
-     *   <li>It is the <em>section</em> endpoint, not the whole timetable's last stop.
-     *       A-B-C-D run as one section names D; a multi-section journey names the
-     *       section being operated.</li>
-     *   <li>The section must be the one containing where the train is, without CRN's
-     *       "previous section at a section start" adjustment
-     *       ({@code operatingSection(false)}). At the journey's first stop that
-     *       adjustment resolves to the previous run's final section, whose endpoint is
-     *       the ORIGIN — which made A-B-C-D display A instead of D.</li>
-     * </ul>
+     * <ol>
+     *   <li><b>直通区段</b>: when the operating section belongs to a through-service
+     *       group, the group's final endpoint.</li>
+     *   <li><b>Sectioned timetable</b>: the endpoint of the section being operated —
+     *       NOT the whole timetable's last stop.</li>
+     *   <li><b>Section-less timetable</b> (the default A-B-C-D): the last stop of the
+     *       run.</li>
+     * </ol>
+     *
+     * <p>Section resolution uses {@code operatingSection(true)}, which keeps the
+     * section containing where the train is; {@code operatingSection(false)} hands back
+     * the previous section whenever the current stop is a section start, which at the
+     * journey's first stop resolves to the previous run's section and made A-B-C-D
+     * display its ORIGIN as the destination.</p>
      */
     private static StationRef displayTerminus(JourneySnapshot journey, StopSnapshot stop) {
         if (journey == null) return null;
@@ -212,10 +214,23 @@ public final class CrnDisplayAdapter {
         StationRef throughGroupEnd = throughGroupTerminus(journey, stop);
         if (throughGroupEnd != null) return throughGroupEnd;
 
-        // operatingSection(true) keeps the section containing the current stop and only
-        // falls back to the previous section when the current one is unusable.
-        return journey.operatingSection(true).map(SectionSnapshot::destination).orElseGet(
-            () -> journey.operatingSection(false).map(SectionSnapshot::destination).orElse(null));
+        // Section endpoint: the section containing where the train is.
+        // operatingSection(true) keeps that section and only falls back to the previous
+        // one when it is unusable; (false) hands back the previous section whenever the
+        // current stop is a section start, which at the journey's first stop resolves to
+        // the previous run's section and named the ORIGIN as the destination.
+        StationRef bySection = journey.operatingSection(true)
+            .map(SectionSnapshot::destination).orElse(null);
+        if (bySection == null) {
+            bySection = journey.operatingSection(false).map(SectionSnapshot::destination).orElse(null);
+        }
+        if (bySection != null) return bySection;
+
+        // Section-less timetable (the default A-B-C-D case): no section resolves at all,
+        // so name the LAST stop of the run. Falling back to the stop being wrapped named
+        // the stop itself, which made A-B-C-D display A.
+        List<StopSnapshot> all = journey.stops();
+        return all.isEmpty() ? null : all.get(all.size() - 1).station();
     }
 
     /**
@@ -234,10 +249,6 @@ public final class CrnDisplayAdapter {
      */
     private static StationRef throughGroupTerminus(JourneySnapshot journey, StopSnapshot stop) {
         return null;
-    }
-
-    private static boolean technical(BoardEntry entry) {
-        return entry.scheduled().isKnown() && entry.scheduled().stayDuration() <= 0;
     }
 
     private static boolean matches(String value, String filter) {

@@ -5,7 +5,6 @@ Create: Railways Navigator Display Native Extended 是 [Create: Railways Navigat
 
 ## 功能目标
 
-- **隐藏技术停车**：对于站前折返时刻表（A-B-C-||-C-B-A），隐藏停站时长为0的站点，使显示内容正确（C→B而非C→C）
 - **新显示格式**：JR 东日本风格的站台电显、VIS与行先表示
 
 ---
