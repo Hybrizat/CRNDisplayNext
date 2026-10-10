@@ -184,7 +184,17 @@ public final class CrnDisplayAdapter {
         StopVisitState state = visitState == null ? StopVisitState.UPCOMING : visitState;
         // Only a borrowed entry knows whether it is a terminus; a synthetic one is not.
         boolean isLastStop = borrowed && entry.terminus() && state != StopVisitState.CURRENT;
-        return new StationDisplayData(entry, isLastStop, false, false, state);
+        // Per-section route colour: a journey that spans several sections (through
+        // service) carries a different line colour per section, and the ribbon is
+        // coloured accordingly instead of using one colour for the whole run.
+        java.awt.Color sectionColor = null;
+        if (journey != null) {
+            sectionColor = journey.sectionOf(stop).map(SectionSnapshot::displayColor)
+                .filter(c -> c != null && !c.isTransparent())
+                .map(c -> new java.awt.Color(c.getRed(), c.getGreen(), c.getBlue()))
+                .orElse(null);
+        }
+        return new StationDisplayData(entry, isLastStop, false, false, state, sectionColor);
     }
 
     /**

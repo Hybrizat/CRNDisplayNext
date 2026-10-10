@@ -18,19 +18,32 @@ public final class StationDisplayData {
      * only thing that can tell a passed stop from an upcoming one.
      */
     private final StopVisitState visitState;
+    /**
+     * Route colour of the section this stop belongs to, or null when the whole display
+     * should use one colour. A through-service journey spans several sections with
+     * different lines (e.g. Tokyu Den-en-toshi -> Tokyo Metro Hanzomon -> Tobu Skytree),
+     * and the ribbon is coloured per section rather than uniformly.
+     */
+    private final java.awt.Color routeColor;
 
     public StationDisplayData(BoardEntry entry, boolean lastStop, boolean nextSectionExcluded, boolean prevSectionExcluded) {
         this(entry, lastStop, nextSectionExcluded, prevSectionExcluded,
-             entry == null ? StopVisitState.UPCOMING : entry.visitState());
+             entry == null ? StopVisitState.UPCOMING : entry.visitState(), null);
     }
 
     public StationDisplayData(BoardEntry entry, boolean lastStop, boolean nextSectionExcluded,
                               boolean prevSectionExcluded, StopVisitState visitState) {
+        this(entry, lastStop, nextSectionExcluded, prevSectionExcluded, visitState, null);
+    }
+
+    public StationDisplayData(BoardEntry entry, boolean lastStop, boolean nextSectionExcluded,
+                              boolean prevSectionExcluded, StopVisitState visitState, java.awt.Color routeColor) {
         this.entry = entry;
         this.lastStop = lastStop;
         this.nextSectionExcluded = nextSectionExcluded;
         this.prevSectionExcluded = prevSectionExcluded;
         this.visitState = visitState == null ? StopVisitState.UPCOMING : visitState;
+        this.routeColor = routeColor;
     }
 
     public BoardEntry raw() { return entry; }
@@ -43,6 +56,9 @@ public final class StationDisplayData {
     
     /** Get the visit state: PASSED, CURRENT, or UPCOMING */
     public StopVisitState getVisitState() { return visitState; }
+
+    /** Section route colour, or null to fall back to the display-wide route colour. */
+    public java.awt.Color getRouteColor() { return routeColor; }
 
     public ListOfStopovers getStopoversView() { return new ListOfStopovers(entry.stopovers().stream().map(StationRef::displayName).toList()); }
     public boolean isLastStop() { return lastStop; }

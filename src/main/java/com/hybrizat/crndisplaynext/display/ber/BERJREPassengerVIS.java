@@ -330,7 +330,10 @@ public class BERJREPassengerVIS implements AbstractAdvancedDisplayRenderer<JREVI
 
             // Active means not passed (current or upcoming)
             boolean active = !isPassed;
-            Color cell = isPassed ? PASSED_COLOR : (active ? rc : INACTIVE);
+            // Per-section colour when the stop carries one (through-service journeys
+            // span several lines), otherwise the display-wide route colour.
+            Color own = stops.get(i).getRouteColor();
+            Color cell = isPassed ? PASSED_COLOR : (active ? (own != null ? own : rc) : INACTIVE);
 
             boolean isR1Head = localI == 0;
             boolean isR2Head = localI == perLine;
@@ -416,9 +419,11 @@ public class BERJREPassengerVIS implements AbstractAdvancedDisplayRenderer<JREVI
         if (dwelling) {
             drawPtrPentagon(g, x + (curr % perLine) * stopsW, y + hLine * 1, barH);
         } else {
-            // Running: a green arrow on the boundary, pointing at the station the
-            // train is bound for (JR East).
-            drawTravelArrow(g, Math.max(x, x + (curr % perLine) * stopsW - TRAVEL_ARROW_W), y + hLine * 1, barH, rc);
+            // Running: a green/dark arrow on the boundary, pointing at the station the
+            // train is bound for (JR East). Its colour follows that station's ribbon.
+            Color bound = stops.get(curr).getRouteColor();
+            if (bound == null) bound = rc;
+            drawTravelArrow(g, Math.max(x, x + (curr % perLine) * stopsW - TRAVEL_ARROW_W), y + hLine * 1, barH, bound);
         }
 
         // Travel times inside bars (draw_times) - only for upcoming stations
