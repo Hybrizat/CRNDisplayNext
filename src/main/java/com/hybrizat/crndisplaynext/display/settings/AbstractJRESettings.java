@@ -38,6 +38,7 @@ public abstract class AbstractJRESettings extends BasicDisplaySettings
     protected static final String NBT_TRAIN_TEXT_WIDTH   = "JRE_TrainTextWidth";
     protected static final String NBT_DEST_WIDTH         = "JRE_DestWidth";
     protected static final String NBT_TIME_WIDTH         = "JRE_TimeWidth";
+    protected static final String NBT_SHOW_STOPOVERS    = "JRE_ShowStopovers";
 
     // Width sentinel: -1 = auto
     public static final byte WIDTH_AUTO = -1;
@@ -53,6 +54,16 @@ public abstract class AbstractJRESettings extends BasicDisplaySettings
     protected byte             timeWidth              = TIME_WIDTH_DEFAULT;
     protected byte             trainTextWidth         = TRAIN_TEXT_WIDTH_DEFAULT;
     protected byte             destWidth              = DEST_WIDTH_DEFAULT;
+    /**
+     * Whether to list the stations a departure goes on to serve (CRN's
+     * {@code BoardEntry.stopovers()}) after the destination.
+     *
+     * <p>Most useful on a 直通 departure: the section's own terminus is the handover
+     * station where the train changes lines, while the 行先 shows the end of the whole
+     * through group, so the stations in between are what tells a passenger where the
+     * service actually calls.</p>
+     */
+    protected boolean          showStopovers         = false;
 
     protected AbstractJRESettings(DLColor defaultFont, DLColor defaultBack) {
         this.fontColor = defaultFont;
@@ -82,6 +93,8 @@ public abstract class AbstractJRESettings extends BasicDisplaySettings
     public boolean isAutoTimeWidth()        { return timeWidth == WIDTH_AUTO; }
     public boolean isAutoTrainTextWidth()   { return trainTextWidth == WIDTH_AUTO; }
     public boolean isAutoDestWidth()        { return destWidth == WIDTH_AUTO; }
+    public boolean showStopovers()                  { return showStopovers; }
+    public void setShowStopovers(boolean b)        { showStopovers = b; }
 
     // ── GUI helpers ───────────────────────────────────────────────────────
     protected void buildSharedGui(GuiBuilderContext context) {
@@ -90,7 +103,21 @@ public abstract class AbstractJRESettings extends BasicDisplaySettings
         this.buildTimeDisplayGui(context);
         buildTrainTextModeGui(context);
         buildShowColorGui(context);
+        buildShowStopoversGui(context);
         buildWidthGui(context);
+    }
+
+    private void buildShowStopoversGui(GuiBuilderContext context) {
+        DLPanel line = context.container().addLine("crndisplaynext.jre_show_stopovers");
+        DLCheckBox box = new DLCheckBox(0, 0, 0, CreateButton.HEIGHT);
+        box.text.set((Component) TextUtils.translate("gui." + CRNDisplayNextMod.MOD_ID + ".jre_show_stopovers"));
+        box.checked.set(showStopovers);
+        box.layoutContraint.set(FlowLayout.FlowConstraint.FILL);
+        box.addEventListener(DLToggleButton.CheckedChangedEvent.class, (s, e) -> {
+            setShowStopovers(e.checked());
+            return false;
+        });
+        line.addComponent(box);
     }
 
     private void buildTrainTextModeGui(GuiBuilderContext context) {
@@ -166,6 +193,7 @@ public abstract class AbstractJRESettings extends BasicDisplaySettings
             setTimeWidth(s.getTimeWidth());
             setTrainTextWidth(s.getTrainTextWidth());
             setDestWidth(s.getDestWidth());
+            setShowStopovers(s.showStopovers());
         }
     }
 
@@ -180,6 +208,7 @@ public abstract class AbstractJRESettings extends BasicDisplaySettings
         nbt.putByte(NBT_TIME_WIDTH,      timeWidth);
         nbt.putByte(NBT_TRAIN_TEXT_WIDTH, trainTextWidth);
         nbt.putByte(NBT_DEST_WIDTH,      destWidth);
+        nbt.putBoolean(NBT_SHOW_STOPOVERS, showStopovers);
     }
 
     @Override
@@ -192,5 +221,6 @@ public abstract class AbstractJRESettings extends BasicDisplaySettings
         if (nbt.contains(NBT_TIME_WIDTH))                timeWidth     = nbt.getByte(NBT_TIME_WIDTH);
         if (nbt.contains(NBT_TRAIN_TEXT_WIDTH))          trainTextWidth = nbt.getByte(NBT_TRAIN_TEXT_WIDTH);
         if (nbt.contains(NBT_DEST_WIDTH))                destWidth     = nbt.getByte(NBT_DEST_WIDTH);
+        if (nbt.contains(NBT_SHOW_STOPOVERS))         showStopovers = nbt.getBoolean(NBT_SHOW_STOPOVERS);
     }
 }

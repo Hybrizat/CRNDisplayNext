@@ -17,6 +17,8 @@
   "display.createrailwaysnavigator.platform.jre_platform": "JRE Platform",
   "enum.crndisplaynext.jre_train_text_mode.line_name": "Line",
   "gui.crndisplaynext.jre_show_color": "Show Color Background",
+  "gui.crndisplaynext.jre_show_stopovers": "Show Stopover Stations",
+  "gui.crndisplaynext.jre.stopovers_suffix": "via",
   "gui.crndisplaynext.jre_train_text_width": "Train Text Width",
   "gui.crndisplaynext.jre_train_text_width.description": "Width of train name/category column. -1 = auto",
   "gui.crndisplaynext.jre_dest_width": "Destination Width",

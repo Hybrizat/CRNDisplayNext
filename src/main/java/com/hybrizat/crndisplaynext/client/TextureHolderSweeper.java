@@ -3,6 +3,7 @@ package com.hybrizat.crndisplaynext.client;
 import com.hybrizat.crndisplaynext.CRNDisplayNextMod;
 import com.hybrizat.crndisplaynext.display.ber.BERJREGraphics;
 import com.hybrizat.crndisplaynext.display.ber.BERJREPassengerVIS;
+import com.hybrizat.crndisplaynext.train.ThroughTerminusCache;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.neoforged.neoforge.event.tick.LevelTickEvent;
 
@@ -26,11 +27,19 @@ public final class TextureHolderSweeper {
 
     private static final int CLEANUP_INTERVAL_TICKS = 40;
     private static int tickCounter;
+    /** Last client level seen, so per-world caches can be dropped when it changes. */
+    private static ClientLevel lastLevel;
 
     private TextureHolderSweeper() {}
 
     public static void onLevelTick(LevelTickEvent.Post event) {
-        if (!(event.getLevel() instanceof ClientLevel)) return;
+        if (!(event.getLevel() instanceof ClientLevel level)) return;
+        // A world change invalidates anything keyed by train ids: the ids and tracking
+        // sessions of the previous world's trains must not be shown for this one's board.
+        if (lastLevel != level) {
+            lastLevel = level;
+            ThroughTerminusCache.clear();
+        }
         clientTicks++;
         if (++tickCounter % CLEANUP_INTERVAL_TICKS != 0) return;
         try {

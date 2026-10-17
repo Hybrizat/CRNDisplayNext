@@ -1,8 +1,10 @@
 package com.hybrizat.crndisplaynext.display.ber;
 
+import com.hybrizat.crndisplaynext.CRNDisplayNextMod;
 import com.hybrizat.crndisplaynext.api.IBasicTrainDisplayDataExt;
 import com.hybrizat.crndisplaynext.display.EJRETrainTextMode;
 import com.hybrizat.crndisplaynext.display.settings.AbstractJRESettings;
+import de.mrjulsen.crn.api.core.ref.StationRef;
 import de.mrjulsen.crn.block.blockentity.AdvancedDisplayBlockEntity;
 import de.mrjulsen.crn.block.blockentity.AdvancedDisplayBlockEntity.EUpdateReason;
 import de.mrjulsen.crn.block.properties.ETimeDisplay;
@@ -13,6 +15,7 @@ import com.hybrizat.crndisplaynext.compat.ETrainStopState;
 import com.hybrizat.crndisplaynext.compat.BasicTrainDisplayData;
 import com.hybrizat.crndisplaynext.compat.DisplayEntry;
 import com.hybrizat.crndisplaynext.compat.TrainStopDisplayData;
+import com.hybrizat.crndisplaynext.train.ThroughTerminusCache;
 import de.mrjulsen.crn.util.ModUtils;
 import de.mrjulsen.mcdragonlib.client.ber.BERGraphics;
 import de.mrjulsen.mcdragonlib.client.ber.BERLabel;
@@ -62,6 +65,9 @@ public abstract class AbstractJRERenderer<S extends AbstractJRESettings>
 
     protected List<DisplayEntry> lastDepartures = new ArrayList<>();
     public List<DisplayEntry> getLastDepartures() { return lastDepartures; }
+
+    /** Last time the through-terminus coverage diagnostic was written, for throttling. */
+    private long lastCoverageLog;
 
     protected BERLabel[][] rows     = new BERLabel[0][];
     // Out-of-service label shown when no trains available
@@ -140,6 +146,16 @@ public abstract class AbstractJRERenderer<S extends AbstractJRESettings>
         lastDepartures = com.hybrizat.crndisplaynext.compat.CrnDisplayAdapter.board(be).stream()
             .limit(maxRows)
             .collect(Collectors.toList());
+
+        // A platform display holds no journey snapshot, so the through-service terminus
+        // has to come from the server; queue a request for the entries still missing one.
+        // Client-side only: CRN guards every renderer update with isClientSide, and the
+        // cache is keyed on the client tick counter.
+        if (level.isClientSide()) {
+            ThroughTerminusCache.request(
+                lastDepartures.stream().map(e -> e.getStationData().raw()).toList());
+            logTerminusCoverage(be);
+        }
 
         int count = lastDepartures.size();
         if (count == 0) { rows = new BERLabel[0][]; return; }
@@ -264,8 +280,27 @@ public abstract class AbstractJRERenderer<S extends AbstractJRESettings>
         row[COL_TIME].color.set(font);
 
         // Destination
-        String dirSfx = loc("gui.crndisplaynext.jre.direction_suffix", "方面");
-        row[COL_DEST].text.set(TextUtils.text(stop.getStationData().getDestination() + dirSfx));
+        // CRN's own destination is the section's passenger-facing terminus, which for a
+        // 直通区段 is the HANDOVER station (the next section's first stop) rather than
+        // where the train ends up. Prefer the resolved through terminus so this board
+        // agrees with the same train's front/side/VIS displays.
+        String destination = ThroughTerminusCache.terminusOf(stop.getStationData().raw());
+        if (destination == null || destination.isBlank()) {
+            destination = stop.getStationData().getDestination();
+        }
+        StringBuilder destText = new StringBuilder(destination)
+            .append(loc("gui.crndisplaynext.jre.direction_suffix", "方面"));
+        // 经由站: the stations this departure goes on to call, which is what makes a
+        // 直通 service legible — the 行先 names the end of the whole through group while
+        // these are the stations in between.
+        if (settings.showStopovers()) {
+            String via = stopovers(stop);
+            if (!via.isEmpty()) {
+                destText.append(' ').append(via)
+                    .append(' ').append(loc("gui.crndisplaynext.jre.stopovers_suffix", "経由"));
+            }
+        }
+        row[COL_DEST].text.set(TextUtils.text(destText.toString()));
         row[COL_DEST].color.set(font);
 
         // Platform
@@ -322,6 +357,44 @@ public abstract class AbstractJRERenderer<S extends AbstractJRESettings>
     protected static String loc(String key, String fallback) {
         try { return CustomLanguage.translate(key).getString(); }
         catch (Exception e) { return fallback; }
+    }
+
+    /**
+     * The stations a departure goes on to call, joined for display. Empty when the call
+     * serves no onward station — a terminus, or a departure from the section's own last
+     * stop — which is the common case and must not add a dangling separator.
+     */
+    private static String stopovers(DisplayEntry entry) {
+        String sep = loc("gui.crndisplaynext.jre.separator", "  ／  ");
+        StringBuilder sb = new StringBuilder();
+        for (StationRef station : entry.getStopovers()) {
+            String name = station.displayName();
+            if (name == null || name.isBlank()) continue;
+            if (sb.length() > 0) sb.append(sep);
+            sb.append(name);
+        }
+        return sb.toString();
+    }
+
+    /** Diagnostic: how many of this board's rows will show the resolved through terminus. */
+    private void logTerminusCoverage(AdvancedDisplayBlockEntity be) {
+        if (!CRNDisplayNextMod.LOGGER.isDebugEnabled()) return;
+        long now = System.currentTimeMillis();
+        if (now - lastCoverageLog < 2000L) return;
+        lastCoverageLog = now;
+        int resolved = 0;
+        String sample = "";
+        for (DisplayEntry entry : lastDepartures) {
+            String name = ThroughTerminusCache.terminusOf(entry.getStationData().raw());
+            if (name == null) continue;
+            resolved++;
+            if (sample.isEmpty()) {
+                sample = entry.getStationData().getDestination() + " -> " + name;
+            }
+        }
+        CRNDisplayNextMod.LOGGER.debug("[Through] board at {} ({}): {}/{} rows resolved{}",
+            be.getBlockPos(), lastDepartures.size(), resolved, lastDepartures.size(),
+            sample.isEmpty() ? "" : ", e.g. " + sample);
     }
 }
 

@@ -1,21 +1,21 @@
 package com.hybrizat.crndisplaynext.display.ber;
 
 import com.hybrizat.crndisplaynext.CRNDisplayNextMod;
-import com.hybrizat.crndisplaynext.api.IBasicTrainDisplayDataExt;
 import com.hybrizat.crndisplaynext.client.DynamicTextureHolder;
 import com.hybrizat.crndisplaynext.client.TextureHolderSweeper;
 import com.hybrizat.crndisplaynext.client.FontLoader;
 import com.hybrizat.crndisplaynext.display.renderer.UpperLCDRenderer;
 import com.hybrizat.crndisplaynext.display.renderer.LayoutConfig;
 import com.hybrizat.crndisplaynext.display.settings.JREVISSettings;
+import com.hybrizat.crndisplaynext.train.TrainView;
+import de.mrjulsen.crn.CreateRailwaysNavigator;
+import de.mrjulsen.crn.api.core.StopVisitState;
 import de.mrjulsen.crn.block.blockentity.AdvancedDisplayBlockEntity;
 import de.mrjulsen.crn.block.blockentity.AdvancedDisplayBlockEntity.EUpdateReason;
 import de.mrjulsen.crn.client.ber.AdvancedDisplayRenderInstance;
 import de.mrjulsen.crn.client.ber.variants.AbstractAdvancedDisplayRenderer;
+import de.mrjulsen.crn.client.lang.CustomLanguage;
 import de.mrjulsen.crn.config.ModClientConfig;
-import com.hybrizat.crndisplaynext.compat.ETrainStopState;
-import com.hybrizat.crndisplaynext.compat.TrainDisplayData;
-import com.hybrizat.crndisplaynext.compat.StationDisplayData;
 import de.mrjulsen.crn.util.ModUtils;
 import de.mrjulsen.mcdragonlib.client.ber.BERGraphics;
 import de.mrjulsen.mcdragonlib.client.util.RenderUtils;
@@ -41,6 +41,9 @@ import java.util.IdentityHashMap;
  * drawing to UpperLCDRenderer / LowerLCD (inline for now).
  */
 public class BERJREPassengerVIS implements AbstractAdvancedDisplayRenderer<JREVISSettings> {
+
+    private static final String KEY_OOS      = "block." + CreateRailwaysNavigator.MOD_ID + ".advanced_display.ber.not_in_service";
+    private static final String KEY_NO_BOARD = "block." + CreateRailwaysNavigator.MOD_ID + ".advanced_display.ber.do_not_board";
 
     private static final UpperLCDRenderer UPPER = new UpperLCDRenderer(LayoutConfig.E235_0);
 
@@ -123,13 +126,13 @@ public class BERJREPassengerVIS implements AbstractAdvancedDisplayRenderer<JREVI
 
     /** Cheap fingerprint of everything the canvas is drawn from. */
     private static String signature(AdvancedDisplayBlockEntity be) {
-        TrainDisplayData d = com.hybrizat.crndisplaynext.compat.CrnDisplayAdapter.train(be);
+        TrainView d = TrainView.of(be);
         if (d == null) return "-";
-        var stops = d.getStopsFromCurrentStation();
+        List<TrainView.StopView> stops = d.route();
         StringBuilder sb = new StringBuilder();
-        sb.append(d.isWaitingAtStation() ? 'W' : 'R').append(stops.size()).append('|');
-        for (var s : stops) {
-            sb.append(s.getRealTimeStation().displayName()).append('/');
+        sb.append(d.waiting() ? 'W' : 'R').append(stops.size()).append('|').append(d.destination()).append('|');
+        for (TrainView.StopView s : stops) {
+            sb.append(s.name()).append('/');
         }
         return sb.toString();
     }
@@ -222,43 +225,36 @@ public class BERJREPassengerVIS implements AbstractAdvancedDisplayRenderer<JREVI
     private void draw(Graphics2D g, AdvancedDisplayBlockEntity be, JREVISSettings cfg, Level lv) {
         g.setColor(DARK_BG); g.fillRect(0, 0, SW, SH);
         g.setColor(WHITE_BG); g.fillRect(0, UH, SW, SH - UH);
-        TrainDisplayData d = com.hybrizat.crndisplaynext.compat.CrnDisplayAdapter.train(be);
-        if (d == null || d.getState().isIrregular(cfg.showDoNotBoardText())) {
-            oos(g, d != null && d.getState().shouldNotBoard(false)); return;
+        TrainView d = TrainView.of(be);
+        if (d == null || d.isIrregular(cfg.showDoNotBoardText())) {
+            // Which of the two texts applies depends on the same setting that got us
+            // here: with the soft terminus included, SOFT_TERMINUS_ANNOUNCED must read
+            // as "do not board" too, not as a generic out-of-service.
+            oos(g, d != null && d.shouldNotBoard(cfg.showDoNotBoardText()));
+            return;
         }
-        List<StationDisplayData> stops = d.getStopsFromCurrentStation();
+        List<TrainView.StopView> stops = d.route();
         if (stops.isEmpty()) return;
 
-        // Build model from CRN data
-        var ss = ETrainStopState.beforeArrival(!d.isWaitingAtStation());
-        Color routeColor = GREEN;
-        String cat = "";
-        if (d.getTrainData() instanceof IBasicTrainDisplayDataExt ext) {
-            cat = ext.crndisplaynext$getCategoryName(ss);
-            DLColor cc = ext.crndisplaynext$getCategoryColor(ss);
-            if (cc != null && !cc.isTransparent()) routeColor = new Color(cc.getRed(), cc.getGreen(), cc.getBlue());
-        }
-        if (cat.isBlank()) {
-            cat = d.getTrainData().getName(ss);
-            DLColor lc = d.getTrainData().getColor(ss);
-            if (lc != null && !lc.isTransparent()) routeColor = new Color(lc.getRed(), lc.getGreen(), lc.getBlue());
-        }
+        // Build model from CRN data. The badge is the 種別 where one is configured and
+        // the line name otherwise; the ribbon colour follows whichever was chosen, and
+        // each stop below may override it with its own section's colour.
+        Color routeColor = toAwt(d.badgeColor(), GREEN);
+        String cat = d.badge();
         String timeStr = new DLTime(lv, DLTime.defaultTimeSystem())
             .format(ModClientConfig.TIME_FORMAT.get().getFormat(), TimeContext.INGAME, DLTime.defaultTimeSystem());
 
-        // Destination: from train or fallback to last stop
-        String dest = d.getCurrentStop().map(s -> s.getDestination()).orElse("");
+        // 行先, already resolved through the through-service chain by TrainView.
+        String dest = d.destination();
         if (dest.isBlank() && !stops.isEmpty())
-            dest = stops.get(stops.size() - 1).getRealTimeStation().displayName();
+            dest = stops.get(stops.size() - 1).name();
 
         // Station name must agree with prefix(): "ただいま" names the station the train is
         // standing at, "次は" names the one it is heading for. Always using the next
         // stop made a dwelling train read "ただいま <次站>".
-        StationDisplayData named = d.isWaitingAtStation() ? d.getCurrentStop().orElse(null) : null;
-        if (named == null) named = d.getNextStop().orElse(null);
-        String stnName = named != null
-            ? named.getRealTimeStation().displayName()
-            : stops.get(0).getRealTimeStation().displayName();
+        TrainView.StopView named = d.waiting() ? d.currentStop() : null;
+        if (named == null) named = d.nextStop();
+        String stnName = named != null ? named.name() : stops.get(0).name();
 
         UPPER.render(g, new UpperLCDRenderer.Model(
             dest,
@@ -267,14 +263,19 @@ public class BERJREPassengerVIS implements AbstractAdvancedDisplayRenderer<JREVI
             stnName,
             timeStr, routeColor));
 
-        lower(g, stops, cfg.circularMode(), routeColor, d.isWaitingAtStation());
+        lower(g, stops, cfg.circularMode(), routeColor, d.waiting());
+    }
+
+    /** CRN colour to AWT, falling back when the line/category has no colour of its own. */
+    private static Color toAwt(DLColor color, Color fallback) {
+        return color == null || color.isTransparent() ? fallback : new Color(color.getRed(), color.getGreen(), color.getBlue());
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
     //  Lower LCD (inline for now — to be extracted)
     // ═══════════════════════════════════════════════════════════════════════════
 
-    private void lower(Graphics2D g, List<StationDisplayData> stops, boolean circular, Color routeColor, boolean dwelling) {
+    private void lower(Graphics2D g, List<TrainView.StopView> stops, boolean circular, Color routeColor, boolean dwelling) {
         g.setClip(0, UH, SW, SH - UH);
         if (circular && stops.size() > 2) lowerCirc(g, stops, routeColor, dwelling);
         else lowerRows(g, stops, routeColor, dwelling);
@@ -282,7 +283,7 @@ public class BERJREPassengerVIS implements AbstractAdvancedDisplayRenderer<JREVI
     }
 
     // E235-1000 JapaneseDisplay — two-row bar layout (JapaneseDisplay.show_stops)
-    private void lowerRows(Graphics2D g, List<StationDisplayData> stops, Color rc, boolean dwelling) {
+    private void lowerRows(Graphics2D g, List<TrainView.StopView> stops, Color rc, boolean dwelling) {
         int n = stops.size();
         if (n == 0) return;
         Font nf = font(FONT_STOPS), tf = font(FONT_TIME);
@@ -292,12 +293,8 @@ public class BERJREPassengerVIS implements AbstractAdvancedDisplayRenderer<JREVI
         // is a station the train has already left whenever it is between stations.
         int curr = 0;
         for (int i = 0; i < n; i++) {
-            var vs = stops.get(i).getVisitState();
-            if (vs == de.mrjulsen.crn.api.core.StopVisitState.CURRENT) {
-                curr = i;
-                break;
-            }
-            if (vs == de.mrjulsen.crn.api.core.StopVisitState.UPCOMING) {
+            StopVisitState vs = stops.get(i).visitState();
+            if (vs == StopVisitState.CURRENT || vs == StopVisitState.UPCOMING) {
                 curr = i;
                 break;
             }
@@ -323,17 +320,13 @@ public class BERJREPassengerVIS implements AbstractAdvancedDisplayRenderer<JREVI
             int line = (localI < perLine) ? 1 : 2;
             int lY = y + hLine * line + topPad * (line - 1);
 
-            de.mrjulsen.crn.api.core.StopVisitState visitState = stops.get(i).getVisitState();
-            boolean isPassed = visitState == de.mrjulsen.crn.api.core.StopVisitState.PASSED;
-            boolean isCurrent = visitState == de.mrjulsen.crn.api.core.StopVisitState.CURRENT;
-            boolean isUpcoming = visitState == de.mrjulsen.crn.api.core.StopVisitState.UPCOMING;
-
-            // Active means not passed (current or upcoming)
+            StopVisitState visitState = stops.get(i).visitState();
+            boolean isPassed = visitState == StopVisitState.PASSED;
             boolean active = !isPassed;
             // Per-section colour when the stop carries one (through-service journeys
             // span several lines), otherwise the display-wide route colour.
-            Color own = stops.get(i).getRouteColor();
-            Color cell = isPassed ? PASSED_COLOR : (active ? (own != null ? own : rc) : INACTIVE);
+            Color own = toAwt(stops.get(i).routeColor(), rc);
+            Color cell = isPassed ? PASSED_COLOR : (active ? own : INACTIVE);
 
             boolean isR1Head = localI == 0;
             boolean isR2Head = localI == perLine;
@@ -376,13 +369,11 @@ public class BERJREPassengerVIS implements AbstractAdvancedDisplayRenderer<JREVI
             int line = (localI < perLine) ? 1 : 2;
             int lY = y + hLine * line + topPad * (line - 1);
             
-            de.mrjulsen.crn.api.core.StopVisitState visitState = stops.get(i).getVisitState();
-            boolean isPassed = visitState == de.mrjulsen.crn.api.core.StopVisitState.PASSED;
-            boolean isCurrent = visitState == de.mrjulsen.crn.api.core.StopVisitState.CURRENT;
+            de.mrjulsen.crn.api.core.StopVisitState visitState = stops.get(i).visitState();
+            boolean isPassed = visitState == StopVisitState.PASSED;
             boolean active = !isPassed;
             g.setColor(isPassed ? PASSED_COLOR : (active ? DARK_BG : INACTIVE));
-            String nm = stops.get(i).getRealTimeStation().displayName();
-            drawVert(g, nm, nf, x + ptr + stopsW / 2, lY - 7 - nf.getSize() * nm.length());
+            drawVert(g, stops.get(i).name(), nf, x + ptr + stopsW / 2, lY - 7 - nf.getSize() * stops.get(i).name().length());
         }
 
         // Marks (draw_marks) — white ring r=11 active, small dot r=5 inactive,
@@ -395,9 +386,8 @@ public class BERJREPassengerVIS implements AbstractAdvancedDisplayRenderer<JREVI
             int cx = x + ptr + stopsW / 2;
             int cy = lY + barH / 2;
             
-            de.mrjulsen.crn.api.core.StopVisitState visitState = stops.get(i).getVisitState();
-            boolean isPassed = visitState == de.mrjulsen.crn.api.core.StopVisitState.PASSED;
-            boolean isCurrent = visitState == de.mrjulsen.crn.api.core.StopVisitState.CURRENT;
+            de.mrjulsen.crn.api.core.StopVisitState visitState = stops.get(i).visitState();
+            boolean isPassed = visitState == StopVisitState.PASSED;
             boolean active = !isPassed;
 
             if (active) {
@@ -421,15 +411,14 @@ public class BERJREPassengerVIS implements AbstractAdvancedDisplayRenderer<JREVI
         } else {
             // Running: a green/dark arrow on the boundary, pointing at the station the
             // train is bound for (JR East). Its colour follows that station's ribbon.
-            Color bound = stops.get(curr).getRouteColor();
-            if (bound == null) bound = rc;
+            Color bound = toAwt(stops.get(curr).routeColor(), rc);
             drawTravelArrow(g, Math.max(x, x + (curr % perLine) * stopsW - TRAVEL_ARROW_W), y + hLine * 1, barH, bound);
         }
 
         // Travel times inside bars (draw_times) - only for upcoming stations
         for (int i = 0; i < n; i++) {
-            de.mrjulsen.crn.api.core.StopVisitState visitState = stops.get(i).getVisitState();
-            if (visitState == de.mrjulsen.crn.api.core.StopVisitState.UPCOMING) {
+            StopVisitState visitState = stops.get(i).visitState();
+            if (visitState == StopVisitState.UPCOMING) {
                 int localI = i;
                 int ptr = (localI % perLine) * stopsW;
                 int line = (localI < perLine) ? 1 : 2;
@@ -476,7 +465,7 @@ public class BERJREPassengerVIS implements AbstractAdvancedDisplayRenderer<JREVI
     // OpenRouteFullRouteDisplay — horseshoe: right fold cap kept, left side
     // clipped flat per OpenRouteFullRouteDisplay._draw_track()/_build_positions()
 
-    private void lowerCirc(Graphics2D g, List<StationDisplayData> stops, Color rc, boolean dwelling) {
+    private void lowerCirc(Graphics2D g, List<TrainView.StopView> stops, Color rc, boolean dwelling) {
         int n = stops.size(), half = (n + 1) / 2;
         Font nf = font(FONT_STOPS), tf = font(FONT_TIME);
         int cy = UH + 153, vO = 47, vI = 19, bO = 37, bI = 12, l = 15, r = 15, sw = 28;
@@ -490,9 +479,8 @@ public class BERJREPassengerVIS implements AbstractAdvancedDisplayRenderer<JREVI
         // first stop that is not passed (passed stops are rendered in grey in front of it).
         int curIdx = 0;
         for (int i = 0; i < n; i++) {
-            var vs = stops.get(i).getVisitState();
-            if (vs == de.mrjulsen.crn.api.core.StopVisitState.CURRENT
-                    || vs == de.mrjulsen.crn.api.core.StopVisitState.UPCOMING) {
+            StopVisitState vs = stops.get(i).visitState();
+            if (vs == StopVisitState.CURRENT || vs == StopVisitState.UPCOMING) {
                 curIdx = i;
                 break;
             }
@@ -504,9 +492,9 @@ public class BERJREPassengerVIS implements AbstractAdvancedDisplayRenderer<JREVI
             int cx = l + (int)(spB * i);
             marker(g, cx, tB, cur);
             var s = stops.get(i);
-            boolean passed = s.getVisitState() == de.mrjulsen.crn.api.core.StopVisitState.PASSED;
+            boolean passed = s.isPassed();
             g.setFont(nf); g.setColor(passed ? PASSED_COLOR : DARK_BG);
-            String nm = s.getRealTimeStation().displayName();
+            String nm = s.name();
             drawVert(g, nm, nf, cx, tB+4);
             if (!cur && !passed) eta(g, tf, s, cx, tB - 8);
         }
@@ -519,7 +507,7 @@ public class BERJREPassengerVIS implements AbstractAdvancedDisplayRenderer<JREVI
                 g.setColor(WHITE_BG); g.fillOval(cx - 5, tT - 5, 10, 10);
                 g.setColor(DARK_BG); g.drawOval(cx - 5, tT - 5, 10, 10);
                 g.setFont(nf); g.setColor(DARK_BG);
-                String nm = s.getRealTimeStation().displayName();
+                String nm = s.name();
                 drawVert(g, nm, nf, cx, tT - nf.getSize() * nm.length());
                 eta(g, tf, s, cx, tT + 18);
             }
@@ -573,8 +561,8 @@ public class BERJREPassengerVIS implements AbstractAdvancedDisplayRenderer<JREVI
         }
     }
 
-    private void eta(Graphics2D g, Font tf, StationDisplayData s, int cx, int top) {
-        long t = s.raw().scheduled().arrival() - ModUtils.getTransformedWorldTime();
+    private void eta(Graphics2D g, Font tf, TrainView.StopView s, int cx, int top) {
+        long t = s.scheduledArrival() - ModUtils.getTransformedWorldTime();
         if (t <= 0) return;
         String v = String.valueOf(Math.max(0, t / 20 / 60));
         g.setFont(tf); g.setColor(DARK_BG);
@@ -583,14 +571,17 @@ public class BERJREPassengerVIS implements AbstractAdvancedDisplayRenderer<JREVI
 
     private void oos(Graphics2D g, boolean nb) {
         g.setColor(WHITE_BG); g.setFont(font(40));
-        String t = nb ? "DO NOT BOARD" : "OUT OF SERVICE";
+        // CRN's own keys, so the text follows the game language instead of being
+        // hardcoded English like the rest of the VIS chrome.
+        String key = nb ? KEY_NO_BOARD : KEY_OOS;
+        String t = CustomLanguage.translate(key).getString();
         g.drawString(t, (SW - g.getFontMetrics().stringWidth(t))/2, SH/2);
     }
 
-    private static String prefix(TrainDisplayData d) {
-        if (d.isWaitingAtStation()) return "ただいま";
-        if (d.getNextStop().isPresent()) {
-            long tta = d.getNextStop().get().getRealTimeArrivalTime() - ModUtils.getTransformedWorldTime();
+    private static String prefix(TrainView d) {
+        if (d.waiting()) return "ただいま";
+        if (d.nextStop() != null) {
+            long tta = d.nextStop().realtimeArrival() - ModUtils.getTransformedWorldTime();
             if (tta > 0 && tta < 100) return "まもなく";
         }
         return "次は";

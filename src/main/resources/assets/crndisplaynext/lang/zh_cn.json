@@ -17,6 +17,8 @@
   "display.createrailwaysnavigator.platform.jre_platform": "JRE 站台显示",
   "enum.crndisplaynext.jre_train_text_mode.line_name": "线路名称",
   "gui.crndisplaynext.jre_show_color": "显示颜色背景",
+  "gui.crndisplaynext.jre_show_stopovers": "显示经由站",
+  "gui.crndisplaynext.jre.stopovers_suffix": "经由",
   "gui.crndisplaynext.jre_train_text_width": "列车文字宽度",
   "gui.crndisplaynext.jre_train_text_width.description": "列车名/类别栏宽度，-1为自动",
   "gui.crndisplaynext.jre_dest_width": "目的地宽度",

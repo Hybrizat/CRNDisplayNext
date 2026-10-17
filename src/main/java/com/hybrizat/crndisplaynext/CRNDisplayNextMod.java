@@ -7,8 +7,9 @@ import net.minecraft.client.Minecraft;
 import com.hybrizat.crndisplaynext.network.CacheListPayload;
 import com.hybrizat.crndisplaynext.network.FetchImagePayload;
 import com.hybrizat.crndisplaynext.network.ImageDataPayload;
-import com.hybrizat.crndisplaynext.network.GraphicsUrlPayload;
 import com.hybrizat.crndisplaynext.network.RequestCachePayload;
+import com.hybrizat.crndisplaynext.network.RequestThroughTerminusPayload;
+import com.hybrizat.crndisplaynext.network.ThroughTerminusPayload;
 import net.neoforged.bus.api.IEventBus;
 import net.neoforged.fml.ModContainer;
 import net.neoforged.fml.common.Mod;
@@ -50,16 +51,26 @@ public class CRNDisplayNextMod {
 
     private void registerPayloads(RegisterPayloadHandlersEvent event) {
         final PayloadRegistrar registrar = event.registrar(MOD_ID);
+        // Setting the image URL is NOT done with a packet of our own: the picker writes
+        // into the GraphicsDisplaySettings instance the settings window holds, and CRN's
+        // own ADVANCED_DISPLAY_UPDATE_PACKET ships it. That packet distinguishes a plain
+        // block from a contraption, which a hand-rolled "pos -> getBlockEntity" path
+        // cannot do (a materialised carriage's display has no block entity in the
+        // player's level, so such a write was silently dropped).
         registrar.playToServer(RequestCachePayload.TYPE,
             RequestCachePayload.CODEC, RequestCachePayload::handle);
-        registrar.playToServer(GraphicsUrlPayload.TYPE,
-            GraphicsUrlPayload.CODEC, GraphicsUrlPayload::handle);
         registrar.playToClient(CacheListPayload.TYPE,
             CacheListPayload.CODEC, CacheListPayload::handle);
         registrar.playToServer(FetchImagePayload.TYPE,
             FetchImagePayload.CODEC, FetchImagePayload::handle);
         registrar.playToClient(ImageDataPayload.TYPE,
             ImageDataPayload.CODEC, ImageDataPayload::handle);
+        // Platform/station boards carry no journey snapshot, so the through-service
+        // terminus has to be resolved server-side against the live backend.
+        registrar.playToServer(RequestThroughTerminusPayload.TYPE,
+            RequestThroughTerminusPayload.CODEC, RequestThroughTerminusPayload::handle);
+        registrar.playToClient(ThroughTerminusPayload.TYPE,
+            ThroughTerminusPayload.CODEC, ThroughTerminusPayload::handle);
         LOGGER.info("CRN Display Native Extended packets registered.");
     }
 }

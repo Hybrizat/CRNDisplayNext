@@ -1,9 +1,7 @@
 package com.hybrizat.crndisplaynext.compat;
 
 import java.util.List;
-import de.mrjulsen.crn.api.core.ref.TrainCategoryRef;
-import de.mrjulsen.crn.core.train.LiveTrainState;
-import de.mrjulsen.crn.core.train.ServiceState;
+import de.mrjulsen.crn.data.TrainJourneyStage;
 import de.mrjulsen.mcdragonlib.util.DLColor;
 
 /** Compatibility-only train view used by existing JRE renderers. */
@@ -34,22 +32,31 @@ public final class TrainDisplayData {
     public java.util.Optional<StationDisplayData> getNextStop() { return java.util.Optional.ofNullable(nextStop); }
     public java.util.List<StationDisplayData> getStopsFromCurrentStation() { return stopsFromCurrentStation; }
 
-    public record Stage(boolean outOfService, boolean shouldNotBoard) {
-        /**
-         * Mirrors CRN's {@code TrainJourneyStage.isIrregular(boolean)}:
-         * {@code shouldNotBoard(includeSoftTerminus) || isOutOfService()}.
-         *
-         * <p>Returning only {@code outOfService} here disabled the whole
-         * "do not board" path: a train sitting at or announcing its terminus is not
-         * out of service, so callers took the normal route branch and the
-         * configured do-not-board text never appeared.</p>
-         */
-        public boolean isIrregular(boolean includeSoftTerminus) {
-            return shouldNotBoard || outOfService;
+    /**
+     * The journey stage, held as CRN's own enum so that the caller's
+     * {@code includeSoftTerminus} choice actually reaches CRN's evaluation.
+     *
+     * <p>This used to be a record of two booleans snapshotted at
+     * {@code shouldNotBoard(false)}, which silently dropped the argument: every
+     * renderer asks with its own {@code showDoNotBoardText} setting, and the
+     * {@code SOFT_TERMINUS_ANNOUNCED} stage — the one stage that setting exists
+     * to control — could therefore never be reported. Keeping the enum means
+     * {@code isIrregular(flag)} / {@code shouldNotBoard(flag)} are CRN's own
+     * predicates, identical to what CRN's built-in displays evaluate.</p>
+     */
+    public static final class Stage {
+        private final TrainJourneyStage stage;
+
+        public Stage(TrainJourneyStage stage) {
+            this.stage = stage == null ? TrainJourneyStage.OUT_OF_SERVICE : stage;
         }
 
-        public boolean shouldNotBoard(boolean includeSoftTerminus) {
-            return shouldNotBoard;
-        }
+        public boolean isOutOfService() { return stage.isOutOfService(); }
+
+        public boolean isIrregular(boolean includeSoftTerminus) { return stage.isIrregular(includeSoftTerminus); }
+
+        public boolean shouldNotBoard(boolean includeSoftTerminus) { return stage.shouldNotBoard(includeSoftTerminus); }
+
+        @Override public String toString() { return stage.name(); }
     }
 }
