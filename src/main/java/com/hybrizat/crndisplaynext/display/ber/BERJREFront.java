@@ -117,18 +117,22 @@ public class BERJREFront implements AbstractAdvancedDisplayRenderer<JREFrontSett
         aLabel.clippingArea.set(clip);
         aLabel.glowing.set(be.isGlowing());
 
+        var trainData = com.hybrizat.crndisplaynext.compat.CrnDisplayAdapter.train(be).getTrainData();
+        // A names the 種別 while the train stands (the service it is about to depart as)
+        // and the line while it runs. Unlike the side display this flip is intended —
+        // telling the service apart from outside is the front board's whole job.
         String categoryName = "";
         DLColor categoryColor = DLColor.TRANSPARENT;
-        boolean catIsLineName = false;
-        if (com.hybrizat.crndisplaynext.compat.CrnDisplayAdapter.train(be).getTrainData() instanceof IBasicTrainDisplayDataExt ext) {
+        if (trainData instanceof IBasicTrainDisplayDataExt ext) {
             categoryName  = ext.crndisplaynext$getCategoryName(stopState);
             categoryColor = ext.crndisplaynext$getCategoryColor(stopState);
         }
-        // Fall back to line color if no category configured
+        // crndisplaynext$getCategoryName answers with an EMPTY string when no 種別 is
+        // configured — it has no blank guard, unlike getName — so this fallback is what
+        // keeps the block showing the line name in that case. It is not dead code.
         if (categoryName.isBlank()) {
-            categoryName  = com.hybrizat.crndisplaynext.compat.CrnDisplayAdapter.train(be).getTrainData().getName(stopState);
-            categoryColor = com.hybrizat.crndisplaynext.compat.CrnDisplayAdapter.train(be).getTrainData().getColor(stopState);
-            catIsLineName = true; // A already shows the line name
+            categoryName  = trainData.getName(stopState);
+            categoryColor = trainData.getColor(stopState);
         }
 
         aLabel.text.set(TextUtils.text(categoryName).withStyle(ChatFormatting.BOLD));
@@ -148,10 +152,18 @@ public class BERJREFront implements AbstractAdvancedDisplayRenderer<JREFrontSett
 
         boolean bIsLineName = settings.getBContent() == EJREFrontBContent.LINE_NAME;
         String bText;
-        if (bIsLineName && catIsLineName) {
-            bText = ""; // A already shows the line name → B stays empty
-        } else if (bIsLineName) {
-            bText = com.hybrizat.crndisplaynext.compat.CrnDisplayAdapter.train(be).getTrainData().getName(stopState);
+        if (bIsLineName) {
+            // The option asks for the LINE name, so read the line name — not
+            // getName(stopState), which answers with the 種別 while the train is standing
+            // and made B an exact copy of the block on its left.
+            bText = trainData.getLineName();
+            // While running, A already shows the line name, and printing it twice side by
+            // side is the duplication this guards against. Comparing the rendered strings
+            // rather than a flag derived from which branch filled A keeps it right for
+            // every combination of configured 種別/线路.
+            if (bText.equals(categoryName)) {
+                bText = "";
+            }
         } else {
             bText = com.hybrizat.crndisplaynext.compat.CrnDisplayAdapter.train(be).getCurrentStop().isPresent()
                 ? com.hybrizat.crndisplaynext.compat.CrnDisplayAdapter.train(be).getCurrentStop().get().getDestination() : "";

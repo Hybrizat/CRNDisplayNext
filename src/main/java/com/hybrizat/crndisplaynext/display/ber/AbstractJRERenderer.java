@@ -385,16 +385,21 @@ public abstract class AbstractJRERenderer<S extends AbstractJRESettings>
         int resolved = 0;
         String sample = "";
         for (DisplayEntry entry : lastDepartures) {
-            String name = ThroughTerminusCache.terminusOf(entry.getStationData().raw());
+            var raw = entry.getStationData().raw();
+            String name = ThroughTerminusCache.terminusOf(raw);
+            if (sample.isEmpty()) {
+                // The section the CALL belongs to, next to both candidate destinations —
+                // this is what distinguishes "resolved for the right section" from
+                // "resolved for wherever the train happens to be".
+                sample = "row0: sec=" + raw.sectionIndex()
+                    + " crn=" + entry.getStationData().getDestination()
+                    + " ours=" + (name == null ? "<pending>" : name);
+            }
             if (name == null) continue;
             resolved++;
-            if (sample.isEmpty()) {
-                sample = entry.getStationData().getDestination() + " -> " + name;
-            }
         }
-        CRNDisplayNextMod.LOGGER.debug("[Through] board at {} ({}): {}/{} rows resolved{}",
-            be.getBlockPos(), lastDepartures.size(), resolved, lastDepartures.size(),
-            sample.isEmpty() ? "" : ", e.g. " + sample);
+        CRNDisplayNextMod.LOGGER.debug("[Through] board at {} ({} rows): {}/{} resolved, {}",
+            be.getBlockPos(), lastDepartures.size(), resolved, lastDepartures.size(), sample);
     }
 }
 

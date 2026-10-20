@@ -1,6 +1,5 @@
 package com.hybrizat.crndisplaynext.display.ber;
 
-import com.hybrizat.crndisplaynext.api.IBasicTrainDisplayDataExt;
 import com.hybrizat.crndisplaynext.display.EJRESideMode;
 import com.hybrizat.crndisplaynext.display.settings.JRESideSettings;
 import de.mrjulsen.crn.CreateRailwaysNavigator;
@@ -9,7 +8,6 @@ import de.mrjulsen.crn.block.blockentity.AdvancedDisplayBlockEntity.EUpdateReaso
 import de.mrjulsen.crn.client.ber.AdvancedDisplayRenderInstance;
 import de.mrjulsen.crn.client.ber.variants.AbstractAdvancedDisplayRenderer;
 import de.mrjulsen.crn.client.lang.CustomLanguage;
-import com.hybrizat.crndisplaynext.compat.ETrainStopState;
 import de.mrjulsen.mcdragonlib.client.ber.BERGraphics;
 import de.mrjulsen.mcdragonlib.client.ber.BERLabel;
 import de.mrjulsen.mcdragonlib.client.ber.BERLabel.EScrollMode;
@@ -28,17 +26,21 @@ import net.minecraft.world.level.block.state.BlockState;
 /**
  * JRE Side Destination Display (E233 style).
  *
+ * The left colour block always names the LINE (falling back to the 種別 only when the
+ * train has no line name at all) and never changes with the dwell state, so the display
+ * keeps the same meaning from the moment the train arrives to the moment it leaves.
+ *
  * NEXT_STOP mode (2-row, left-right split):
  *   ┌──────┬──────────────────┐
- *   │[種別]│ [行先]            │
- *   │ 色块 │ 次は [次の駅]     │
+ *   │[線路名]│ [行先]            │
+ *   │ 色块  │ 次は [次の駅]     │
  *   └──────┴──────────────────┘
  *
  * DEST mode (1-row):
- *   [種別] [行先]
+ *   [線路名] [行先]
  *
  * LINE mode (1-row):
- *   [種別] [線路名]
+ *   [線路名] — the block spans the full width, since B would only repeat it
  */
 public class BERJRESide implements AbstractAdvancedDisplayRenderer<JRESideSettings> {
 
@@ -47,8 +49,8 @@ public class BERJRESide implements AbstractAdvancedDisplayRenderer<JRESideSettin
     private static final String KEY_NEXT     = "gui.crndisplaynext.jre.next_stop_prefix"; // "次は"
 
     private final BERLabel oosLabel      = new BERLabel();
-    private final BERLabel categoryLabel = new BERLabel(); // A: 種別
-    private final BERLabel mainLabel     = new BERLabel(); // B: 行先 or 線路
+    private final BERLabel categoryLabel = new BERLabel(); // A: 線路名 (fallback 種別)
+    private final BERLabel mainLabel     = new BERLabel(); // B: 行先
     private final BERLabel nextLabel     = new BERLabel(); // "次は ○○" (NEXT_STOP mode only)
 
     public BERJRESide() {
@@ -120,26 +122,26 @@ public class BERJRESide implements AbstractAdvancedDisplayRenderer<JRESideSettin
             return;
         }
 
-        ETrainStopState stopState = ETrainStopState.beforeArrival(
-            !com.hybrizat.crndisplaynext.compat.CrnDisplayAdapter.train(be).isWaitingAtStation());
         EJRESideMode mode = settings.getSideMode();
 
-        // ── Category (A) ────────────────────────────────────────────────
+        // ── Line (A) ───────────────────────────────────────────────────
+        // The left colour block names the LINE and nothing else, and must not change
+        // what it means when the train comes to a stand.
+        //
+        // It used to read crndisplaynext$getCategoryName(beforeArrival(!dwelling)), which
+        // yields the 種別 while dwelling and the line name while running — the display
+        // silently changed identity on every arrival. ETrainStopState only encodes CRN's
+        // old arrival/departure distinction and means nothing for a destination board, so
+        // it is not consulted here at all.
         categoryLabel.clippingArea.set(clip);
         categoryLabel.glowing.set(be.isGlowing());
 
-        String catName  = "";
-        DLColor catColor = DLColor.TRANSPARENT;
-        boolean catIsLineName = false;
-        if (com.hybrizat.crndisplaynext.compat.CrnDisplayAdapter.train(be).getTrainData() instanceof IBasicTrainDisplayDataExt ext) {
-            catName  = ext.crndisplaynext$getCategoryName(stopState);
-            catColor = ext.crndisplaynext$getCategoryColor(stopState);
-        }
-        if (catName.isBlank()) {
-            catName  = com.hybrizat.crndisplaynext.compat.CrnDisplayAdapter.train(be).getTrainData().getName(stopState);
-            catColor = com.hybrizat.crndisplaynext.compat.CrnDisplayAdapter.train(be).getTrainData().getColor(stopState);
-            catIsLineName = true; // category area already shows the line name
-        }
+        var trainData = com.hybrizat.crndisplaynext.compat.CrnDisplayAdapter.train(be).getTrainData();
+        String lineName = trainData.getLineName();
+        // A train with no line still needs the block to say something, so fall back to
+        // its 種別 rather than leaving a blank cell.
+        String catName   = lineName.isBlank() ? trainData.getCategoryName() : lineName;
+        DLColor catColor = lineName.isBlank() ? trainData.getCategoryColor() : trainData.getLineColor();
 
         categoryLabel.text.set(TextUtils.text(catName).withStyle(ChatFormatting.BOLD));
         if (settings.showLineColor() && !catColor.isTransparent()) {
@@ -165,10 +167,9 @@ public class BERJRESide implements AbstractAdvancedDisplayRenderer<JRESideSettin
 
         String dest = com.hybrizat.crndisplaynext.compat.CrnDisplayAdapter.train(be).getCurrentStop().isPresent()
             ? com.hybrizat.crndisplaynext.compat.CrnDisplayAdapter.train(be).getCurrentStop().get().getDestination() : "";
-        String lineName = com.hybrizat.crndisplaynext.compat.CrnDisplayAdapter.train(be).getTrainData().getName(stopState);
 
         if (mode == EJRESideMode.NEXT_STOP) {
-            // Left column: category spans full height, centered vertically
+            // Left column: line name spans full height, centered vertically
             float catY = h / 2f - 3f;
             categoryLabel.position.set(Point.of(3, catY));
 
@@ -186,11 +187,14 @@ public class BERJRESide implements AbstractAdvancedDisplayRenderer<JRESideSettin
             nextLabel.preferredWidth.set(w - 3 - bX);
 
         } else {
-            // Single row: category left, main right, vertically centered
+            // Single row: line left, main right, vertically centered
             float rowY = h / 2f - 3f;
-            boolean mainEmpty = (mode == EJRESideMode.LINE) && catIsLineName;
+            // LINE mode asks for exactly what the left block already shows, so B stays
+            // empty and the line is centred across the whole display. The old guard
+            // tested a flag that was only set when no 種別 was configured, so with a
+            // 種別 present both labels rendered the same string side by side.
+            boolean mainEmpty = (mode == EJRESideMode.LINE);
             if (mainEmpty) {
-                // B empty → category centered across the full display width
                 categoryLabel.preferredWidth.set((float)(w - 6));
                 categoryLabel.position.set(Point.of(3, rowY));
                 mainLabel.text.set(TextUtils.empty());
@@ -199,11 +203,7 @@ public class BERJRESide implements AbstractAdvancedDisplayRenderer<JRESideSettin
                 categoryLabel.position.set(Point.of(3, rowY));
                 mainLabel.position.set(Point.of(bX, rowY));
                 mainLabel.preferredWidth.set(w - 3 - bX);
-                if (mode == EJRESideMode.LINE) {
-                    mainLabel.text.set(TextUtils.text(lineName).withStyle(ChatFormatting.BOLD));
-                } else {
-                    mainLabel.text.set(TextUtils.text(dest).withStyle(ChatFormatting.BOLD));
-                }
+                mainLabel.text.set(TextUtils.text(dest).withStyle(ChatFormatting.BOLD));
             }
             nextLabel.text.set(TextUtils.empty());
         }

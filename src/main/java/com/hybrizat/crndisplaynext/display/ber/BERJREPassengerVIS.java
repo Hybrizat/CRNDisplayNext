@@ -406,13 +406,20 @@ public class BERJREPassengerVIS implements AbstractAdvancedDisplayRenderer<JREVI
         // Pointer pentagon (draw_ptr) marks the station the train is STOPPING at.
         // It is only meaningful while dwelling, so it is suppressed while running
         // rather than being dragged onto the station ahead.
+        //
+        // The y position must follow the row the marked station is actually drawn in:
+        // a long route wraps onto a second row, whose bars sit at
+        // y + hLine*2 + topPad. Hard-coding the first row's y left the marker floating
+        // over the wrong bar as soon as the train moved into the wrapped part.
+        int ptrLine = (curr < perLine) ? 1 : 2;
+        int ptrY = y + hLine * ptrLine + topPad * (ptrLine - 1);
         if (dwelling) {
-            drawPtrPentagon(g, x + (curr % perLine) * stopsW, y + hLine * 1, barH);
+            drawPtrPentagon(g, x + (curr % perLine) * stopsW, ptrY, barH);
         } else {
             // Running: a green/dark arrow on the boundary, pointing at the station the
             // train is bound for (JR East). Its colour follows that station's ribbon.
             Color bound = toAwt(stops.get(curr).routeColor(), rc);
-            drawTravelArrow(g, Math.max(x, x + (curr % perLine) * stopsW - TRAVEL_ARROW_W), y + hLine * 1, barH, bound);
+            drawTravelArrow(g, Math.max(x, x + (curr % perLine) * stopsW - TRAVEL_ARROW_W), ptrY, barH, bound);
         }
 
         // Travel times inside bars (draw_times) - only for upcoming stations
@@ -504,8 +511,15 @@ public class BERJREPassengerVIS implements AbstractAdvancedDisplayRenderer<JREVI
             for (int i = 0; i < tn; i++) {
                 int cx = l + (int)(spT * (tn - 1 - i));
                 var s = stops.get(half + i);
-                g.setColor(WHITE_BG); g.fillOval(cx - 5, tT - 5, 10, 10);
-                g.setColor(DARK_BG); g.drawOval(cx - 5, tT - 5, 10, 10);
+                // The pointer belongs on whichever row the marked station is drawn in.
+                // Only the lower row used to get one, so a train dwelling in the wrapped
+                // half of the horseshoe had no marker at all.
+                if (dwelling && half + i == curIdx) {
+                    marker(g, cx, tT, true);
+                } else {
+                    g.setColor(WHITE_BG); g.fillOval(cx - 5, tT - 5, 10, 10);
+                    g.setColor(DARK_BG); g.drawOval(cx - 5, tT - 5, 10, 10);
+                }
                 g.setFont(nf); g.setColor(DARK_BG);
                 String nm = s.name();
                 drawVert(g, nm, nf, cx, tT - nf.getSize() * nm.length());

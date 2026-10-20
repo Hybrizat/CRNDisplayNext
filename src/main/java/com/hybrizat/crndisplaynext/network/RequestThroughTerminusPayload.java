@@ -34,8 +34,15 @@ import java.util.UUID;
  */
 public record RequestThroughTerminusPayload(List<TrainCall> calls) implements CustomPacketPayload {
 
-    /** One board entry to resolve: which train, which tracking session, and whether it is standing there. */
-    public record TrainCall(UUID trainId, UUID sessionId, boolean arrived) {}
+    /**
+     * One board entry to resolve: which train, which tracking session, which section the
+     * call belongs to, and whether the train is standing at that call's station.
+     *
+     * <p>{@code sectionIndex} is what makes the row correct: the destination of a
+     * departure board entry describes the section <em>that call</em> belongs to, not the
+     * section the train happens to be running at the moment the board is drawn.</p>
+     */
+    public record TrainCall(UUID trainId, UUID sessionId, int sectionIndex, boolean arrived) {}
 
     public static final Type<RequestThroughTerminusPayload> TYPE =
         new Type<>(ResourceLocation.fromNamespaceAndPath(CRNDisplayNextMod.MOD_ID, "request_through_terminus"));
@@ -49,6 +56,7 @@ public record RequestThroughTerminusPayload(List<TrainCall> calls) implements Cu
             for (TrainCall call : payload.calls()) {
                 out.writeUUID(call.trainId());
                 out.writeUUID(call.sessionId());
+                out.writeVarInt(call.sectionIndex());
                 out.writeBoolean(call.arrived());
             }
         },
@@ -56,7 +64,7 @@ public record RequestThroughTerminusPayload(List<TrainCall> calls) implements Cu
             int size = Math.min(in.readVarInt(), MAX_CALLS);
             List<TrainCall> calls = new ArrayList<>(size);
             for (int i = 0; i < size; i++) {
-                calls.add(new TrainCall(in.readUUID(), in.readUUID(), in.readBoolean()));
+                calls.add(new TrainCall(in.readUUID(), in.readUUID(), in.readVarInt(), in.readBoolean()));
             }
             return new RequestThroughTerminusPayload(List.copyOf(calls));
         });
@@ -99,20 +107,49 @@ public record RequestThroughTerminusPayload(List<TrainCall> calls) implements Cu
      */
     public static List<ThroughTerminusPayload.Result> resolve(List<TrainCall> calls) {
         List<ThroughTerminusPayload.Result> results = new ArrayList<>(calls.size());
+        List<String> skipped = new ArrayList<>();
+        StringBuilder detail = new StringBuilder();
         for (TrainCall call : calls) {
             if (call == null || call.trainId() == null) continue;
+            String id = call.trainId().toString().substring(0, 8);
             JourneySnapshot journey = RailwayBackendApi.getJourney(call.trainId()).orElse(null);
-            if (journey == null || journey.isEmpty()) continue;
-            var route = RouteResolver.resolve(journey, call.arrived());
-            var terminus = RouteResolver.terminus(journey, route);
-            if (terminus == null || !terminus.isKnown()) continue;
+            if (journey == null || journey.isEmpty()) {
+                skipped.add(id + ":no-journey");
+                continue;
+            }
+            // The row belongs to the section this call is in, so that is what decides its
+            // destination. Falling back to the train's current section only matters when
+            // the call carries no section at all (-1), which a section-less timetable does.
+            var terminus = RouteResolver.terminusOfSection(journey, call.sectionIndex());
+            if (terminus == null || !terminus.isKnown()) {
+                terminus = RouteResolver.terminus(journey, RouteResolver.resolve(journey, call.arrived()));
+            }
+            if (terminus == null || !terminus.isKnown()) {
+                skipped.add(id + ":no-terminus");
+                continue;
+            }
             results.add(new ThroughTerminusPayload.Result(call.trainId(), call.sessionId(), terminus.displayName()));
+            // What CRN itself would have named for the same call, so the two can be
+            // compared: SectionSnapshot.destination() is the raw section terminus, is not
+            // filtered against the station blacklist, and for a through section is the
+            // handover station rather than the end of the chain.
+            String crnRaw = journey.section(call.sectionIndex())
+                .map(s -> s.destination().displayName()).orElse("-");
+            if (detail.length() < 400) {
+                detail.append(' ').append(id).append('=').append(terminus.displayName())
+                    .append("(crn:").append(crnRaw).append(')');
+            }
+        }
+        if (CRNDisplayNextMod.LOGGER.isDebugEnabled()) {
+            CRNDisplayNextMod.LOGGER.debug("[Through] S: {} call(s) -> {} resolved{}; skipped={}",
+                calls.size(), results.size(), detail, skipped);
         }
         return results;
     }
 
     /** Convenience for building a call from a board entry. */
     public static TrainCall of(BoardEntry entry) {
-        return new TrainCall(entry.trainId(), entry.sessionId(), entry.visitState() == StopVisitState.CURRENT);
+        return new TrainCall(entry.trainId(), entry.sessionId(), entry.sectionIndex(),
+            entry.visitState() == StopVisitState.CURRENT);
     }
 }

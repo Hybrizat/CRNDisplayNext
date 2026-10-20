@@ -4,6 +4,7 @@ import de.mrjulsen.crn.api.core.ref.StationRef;
 import de.mrjulsen.crn.api.core.snapshot.JourneySnapshot;
 import de.mrjulsen.crn.api.core.snapshot.SectionSnapshot;
 import de.mrjulsen.crn.api.core.snapshot.StopSnapshot;
+import de.mrjulsen.crn.data.settings.GlobalSettings;
 
 import java.util.List;
 
@@ -75,12 +76,89 @@ public final class RouteResolver {
     /**
      * The 行先 for this service: the station at the end of the route, falling back to
      * the last stop of the whole run when the route cannot be resolved.
+     *
+     * <p>Blacklisted stations are walked back over. {@code journey.stops()} is already
+     * free of them, so this is belt and braces — but CRN deliberately keeps the stop a
+     * train is <em>currently standing at</em> in the list so its position stays
+     * describable, and that exemption can put a blacklisted station back at the end of
+     * the route. A destination names where the service goes; it is not a description of
+     * where the train happens to be, so it must not name one.</p>
      */
     public static StationRef terminus(JourneySnapshot journey, Route route) {
         List<StopSnapshot> all = journey == null ? List.of() : journey.stops();
         if (all.isEmpty()) return null;
         int end = route != null && !route.isEmpty() ? Math.min(route.endIndex(), all.size() - 1) : all.size() - 1;
-        return all.get(Math.max(0, end)).station();
+        return lastVisible(all.subList(0, end + 1));
+    }
+
+    /**
+     * The terminus of the service that begins in the given section: the end of that
+     * section's through group.
+     *
+     * <p>A departure board needs this rather than {@link #resolve}, because each of its
+     * rows is one <em>call</em> and has to be described by the section that call belongs
+     * to. The train's current position is the wrong anchor: the board at D already lists
+     * a train that has not reached D yet, so while that train is still working the
+     * earlier section the row would be labelled with the earlier section's terminus
+     * instead of D's own.</p>
+     *
+     * @param sectionIndex the call's {@code BoardEntry.sectionIndex()}, or {@code -1}
+     * @return the terminus, or {@code null} when the run has no such section
+     */
+    public static StationRef terminusOfSection(JourneySnapshot journey, int sectionIndex) {
+        if (journey == null || sectionIndex < 0) return null;
+        return terminusOfSection(journey, journey.section(sectionIndex).orElse(null));
+    }
+
+    /** The terminus of the through group that starts at the given section. */
+    public static StationRef terminusOfSection(JourneySnapshot journey, SectionSnapshot section) {
+        if (journey == null || section == null) return null;
+        SectionSnapshot ending = throughGroupEnd(journey, section);
+        if (ending == null) return null;
+        StationRef terminus = lastVisible(ending.stops());
+        // An ending section with no visible stop of its own leaves the caller with
+        // nothing; the whole run is the better answer than a blank destination.
+        return terminus != null ? terminus : lastVisible(journey.stops());
+    }
+
+    /**
+     * The last station of the given stops that may be named, or {@code null} when they
+     * are all blacklisted.
+     *
+     * <p>{@code journey.stops()} is already free of blacklisted stations, so this is
+     * belt and braces — but CRN deliberately keeps the stop a train is <em>currently
+     * standing at</em> in the list so its position stays describable, and that exemption
+     * can put a blacklisted station back at the end of a run. A destination names where
+     * the service goes; it is not a description of where the train happens to be, so it
+     * must not name one.</p>
+     */
+    private static StationRef lastVisible(List<StopSnapshot> stops) {
+        for (int i = stops.size() - 1; i >= 0; i--) {
+            if (!isBlacklisted(stops.get(i).station())) return stops.get(i).station();
+        }
+        return null;
+    }
+
+    /**
+     * Whether a station may not be named on a public display.
+     *
+     * <p>The blacklist lives in a server-side settings file CRN never mirrors to
+     * clients, so {@code hasInstance()} is false there and nothing gets filtered — which
+     * is right, because a client has no list to filter against. Every display that needs
+     * this resolves its destination on the server for exactly that reason.</p>
+     */
+    private static boolean isBlacklisted(StationRef station) {
+        if (station == null || !station.isKnown()) return false;
+        if (!GlobalSettings.hasInstance()) return false;
+        try {
+            GlobalSettings settings = GlobalSettings.getInstance();
+            // CRN filters on the live station name while displays show the tag name, so
+            // a blacklist entry written for either spelling has to catch it.
+            return settings.isStationBlacklisted(station.name())
+                || settings.isStationBlacklisted(station.displayName());
+        } catch (Exception e) {
+            return false;
+        }
     }
 
     /**
