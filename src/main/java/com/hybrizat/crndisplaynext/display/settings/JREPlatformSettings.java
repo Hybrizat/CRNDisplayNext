@@ -23,8 +23,9 @@ import net.minecraft.network.chat.Component;
  *   - left platform filter (station name or platform number, supports wildcards)
  *   - right platform filter
  *
- * Matching uses TrainUtils.stationMatches() at render time,
- * comparing against getRealTimeStation().info().platform() or station tag name.
+ * The filters are compared against the platform this train calls at (and the
+ * station's own/tag name) in {@code BERJREPlatform}; see that class for the
+ * exact candidate list.
  */
 public class JREPlatformSettings extends AbstractJRESettings {
 
@@ -69,47 +70,42 @@ public class JREPlatformSettings extends AbstractJRESettings {
         enableLine.addComponent(enableBox);
 
         // ── Left platform input ───────────────────────────────────────────
-        // CreateTextBox.title renders as a tooltip/hint on the input box,
-        // consistent with CRN's own text inputs (e.g. station filter box).
+        // The caption is a real label, not just an icon tooltip: the arrow only
+        // appears once a filter is typed, so the boxes have to explain themselves.
         DLPanel leftLine = context.container().addLine("crndisplaynext.jre_left_platform_input");
-        CreateTextBox leftBox = new CreateTextBox(0, 0, 0);
-        leftBox.layoutContraint.set(FlowLayout.FlowConstraint.FILL);
-        leftBox.maxCharacters.set(64);
-        leftBox.text.get().set(leftPlatform);
-        leftBox.addEventListener(DLRichTextLabel.TextChangedEvent.class, (s, e) -> {
-            setLeftPlatform(e.text().getPlainText());
-            return false;
-        });
-        // Use a label component before the box — mirrors CRN's station filter pattern
-        de.mrjulsen.crn.client.gui.widgets.IconSlotWidget leftIcon =
-            new de.mrjulsen.crn.client.gui.widgets.IconSlotWidget(0, 0);
-        leftIcon.tooltip.set(new de.mrjulsen.mcdragonlib.client.gui.widgets.components.DLTooltip(
-            java.util.List.of(TextUtils.translate("gui." + CRNDisplayNextMod.MOD_ID + ".jre_left_platform"),
-                              TextUtils.translate("gui." + CRNDisplayNextMod.MOD_ID + ".jre_platform_hint")),
-            200));
-        leftIcon.icon.set(de.mrjulsen.crn.client.gui.ModGuiIcons.TEXT.getAsSprite(16, 16));
-        leftLine.addComponent(leftIcon);
-        leftLine.addComponent(leftBox);
+        leftLine.addComponent(caption("jre_left_platform"));
+        leftLine.addComponent(filterBox(leftPlatform, this::setLeftPlatform));
 
         // ── Right platform input ──────────────────────────────────────────
         DLPanel rightLine = context.container().addLine("crndisplaynext.jre_right_platform_input");
-        CreateTextBox rightBox = new CreateTextBox(0, 0, 0);
-        rightBox.layoutContraint.set(FlowLayout.FlowConstraint.FILL);
-        rightBox.maxCharacters.set(64);
-        rightBox.text.get().set(rightPlatform);
-        rightBox.addEventListener(DLRichTextLabel.TextChangedEvent.class, (s, e) -> {
-            setRightPlatform(e.text().getPlainText());
+        rightLine.addComponent(caption("jre_right_platform"));
+        rightLine.addComponent(filterBox(rightPlatform, this::setRightPlatform));
+    }
+
+    /** Visible label for one side, with the matching rules as its tooltip. */
+    private static DLRichTextLabel caption(String titleKey) {
+        Component title = TextUtils.translate("gui." + CRNDisplayNextMod.MOD_ID + "." + titleKey);
+        Component hint  = TextUtils.translate("gui." + CRNDisplayNextMod.MOD_ID + ".jre_platform_hint");
+        int width = net.minecraft.client.Minecraft.getInstance().font.width(title) + 2;
+        DLRichTextLabel label = new DLRichTextLabel(0, 0, width, CreateButton.HEIGHT);
+        label.contentPadding.set(new de.mrjulsen.mcdragonlib.client.gui.widgets.richtext.Padding(4, 0, 0, 0));
+        label.text.get().set(title.getString());
+        label.tooltip.set(new de.mrjulsen.mcdragonlib.client.gui.widgets.components.DLTooltip(
+            java.util.List.of(title, hint), 220));
+        return label;
+    }
+
+    /** One platform filter box, bound to the given setter. */
+    private static CreateTextBox filterBox(String initial, java.util.function.Consumer<String> sink) {
+        CreateTextBox box = new CreateTextBox(0, 0, 0);
+        box.layoutContraint.set(FlowLayout.FlowConstraint.FILL);
+        box.maxCharacters.set(64);
+        box.text.get().set(initial == null ? "" : initial);
+        box.addEventListener(DLRichTextLabel.TextChangedEvent.class, (s, e) -> {
+            sink.accept(e.text().getPlainText());
             return false;
         });
-        de.mrjulsen.crn.client.gui.widgets.IconSlotWidget rightIcon =
-            new de.mrjulsen.crn.client.gui.widgets.IconSlotWidget(0, 0);
-        rightIcon.tooltip.set(new de.mrjulsen.mcdragonlib.client.gui.widgets.components.DLTooltip(
-            java.util.List.of(TextUtils.translate("gui." + CRNDisplayNextMod.MOD_ID + ".jre_right_platform"),
-                              TextUtils.translate("gui." + CRNDisplayNextMod.MOD_ID + ".jre_platform_hint")),
-            200));
-        rightIcon.icon.set(de.mrjulsen.crn.client.gui.ModGuiIcons.TEXT.getAsSprite(16, 16));
-        rightLine.addComponent(rightIcon);
-        rightLine.addComponent(rightBox);
+        return box;
     }
 
     @Override

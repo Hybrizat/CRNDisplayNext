@@ -39,7 +39,7 @@ Create: Railways Navigator Display Native Extended is an add-on mod for [Create:
 - Category / line colour background (optional)
 - Time format, showing the same train multiple times, and per-column widths (`-1` = auto, aligned to the widest text on the whole board)
 - Optional 経由 (via) stations
-- The platform display can show ← / → direction arrows, matching each row's station name or platform number against the left/right filters you configure
+- The platform display can show ← / → direction arrows: each row is matched against the left/right filter by the platform (or station name) it calls at, with `*` wildcards; leave a filter empty and that side draws nothing
 
 ### Destination Indicators
 

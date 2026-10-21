@@ -26,7 +26,7 @@
   "gui.crndisplaynext.jre_show_arrow": "显示方向箭头",
   "gui.crndisplaynext.jre_left_platform": "← 左侧站台",
   "gui.crndisplaynext.jre_right_platform": "→ 右侧站台",
-  "gui.crndisplaynext.jre_platform_hint": "输入车站名称或站台号，支持 * 通配符",
+  "gui.crndisplaynext.jre_platform_hint": "填列车在本站停靠的站台号（如 1 或 1番線）或车站名称，支持 * 通配符。留空则不出箭头；同一行两侧都匹配时按左侧显示。",
   "display.createrailwaysnavigator.train_destination.jre_front": "JRE 前面幕",
   "display.createrailwaysnavigator.train_destination.jre_side": "JRE 侧面幕",
   "display.createrailwaysnavigator.passenger_information.jre_vis": "JRE 乘客VIS",

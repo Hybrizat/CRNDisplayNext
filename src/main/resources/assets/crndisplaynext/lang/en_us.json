@@ -26,7 +26,7 @@
   "gui.crndisplaynext.jre_show_arrow": "Show Direction Arrow",
   "gui.crndisplaynext.jre_left_platform": "← Left Platform",
   "gui.crndisplaynext.jre_right_platform": "→ Right Platform",
-  "gui.crndisplaynext.jre_platform_hint": "Enter station name or platform number. Supports * wildcard. Hover for more info.",
+  "gui.crndisplaynext.jre_platform_hint": "Platform this train calls at (e.g. 1 or 1番線) or station name. Supports * wildcard. Empty = no arrow; a row matching both sides shows ←.",
   "display.createrailwaysnavigator.train_destination.jre_front": "JRE Front",
   "display.createrailwaysnavigator.train_destination.jre_side": "JRE Side",
   "display.createrailwaysnavigator.passenger_information.jre_vis": "JRE VIS",

@@ -1,13 +1,18 @@
 package com.hybrizat.crndisplaynext.display.ber;
 
+import com.hybrizat.crndisplaynext.CRNDisplayNextMod;
+import com.hybrizat.crndisplaynext.compat.DisplayEntry;
 import com.hybrizat.crndisplaynext.display.settings.JREPlatformSettings;
+import de.mrjulsen.crn.api.core.ref.StationRef;
+import de.mrjulsen.crn.api.core.snapshot.BoardEntry;
 import de.mrjulsen.crn.block.blockentity.AdvancedDisplayBlockEntity;
 import de.mrjulsen.crn.block.blockentity.AdvancedDisplayBlockEntity.EUpdateReason;
 import de.mrjulsen.crn.client.ber.AdvancedDisplayRenderInstance;
 import de.mrjulsen.crn.util.TrainUtils;
-import com.hybrizat.crndisplaynext.compat.DisplayEntry;
 import de.mrjulsen.mcdragonlib.client.ber.BERGraphics;
 import de.mrjulsen.mcdragonlib.client.ber.BERLabel;
+import de.mrjulsen.mcdragonlib.client.ber.BERLabel.EScrollMode;
+import de.mrjulsen.mcdragonlib.data.ETextAlignment;
 import de.mrjulsen.mcdragonlib.util.Pair;
 import de.mrjulsen.mcdragonlib.util.TextUtils;
 import de.mrjulsen.mcdragonlib.util.math.Point;
@@ -25,16 +30,28 @@ import java.util.List;
  *   Left arrow  (←) is placed at x = 3 (leftmost), rendered BEFORE TrainText.
  *   Right arrow (→) is placed at x = totalW - 3 - ARROW_WIDTH (rightmost).
  *   AbstractJRERenderer reserves space via arrowReservedLeft/Right so content
- *   columns never overlap the arrow columns.
+ *   columns never overlap the arrow columns. Space is only reserved for a side
+ *   that actually has a filter configured, so enabling the feature without any
+ *   filter does not shift the board.
  *
- * Double-sided:
- *   When backSide=true, ← and → are swapped so the arrow always points
- *   toward the correct physical side regardless of which face is being rendered.
+ *   Both faces get exactly the same arrow, just like the text rows: CRN mirrors
+ *   the whole display for the back face, so local x = 3 is on the viewer's left
+ *   from either side.
  *
- * Matching:
- *   For each row, station tag name and platform number are compared against
- *   leftPlatform / rightPlatform filters using TrainUtils.stationMatches()
- *   (supports * wildcards).
+ * Matching (per row):
+ *   The platform at which this train calls at this display's station decides the
+ *   side. CRN has no notion of a physical left/right platform, so the player
+ *   names the platforms: leftPlatform / rightPlatform are compared against the
+ *   call's own station and platform using TrainUtils.stationMatches(), which
+ *   supports * wildcards.
+ *
+ *   Candidates are the station's own name, its station-tag name, its platform
+ *   ("1"), and its platform as the board prints it ("1番線") — the platform
+ *   column of the station display uses the same value plus the localized
+ *   suffix, so a player can copy either form.
+ *
+ *   A row that matches both filters is shown as ← (left wins). Both filters
+ *   empty means no arrows at all.
  */
 public class BERJREPlatform extends AbstractJRERenderer<JREPlatformSettings> {
 
@@ -42,19 +59,31 @@ public class BERJREPlatform extends AbstractJRERenderer<JREPlatformSettings> {
     private static final String ARROW_LEFT  = "←"; // ←
     private static final String ARROW_RIGHT = "→"; // →
 
-    private BERLabel[] arrowLabels       = new BERLabel[0];
-    private String     cachedStationFilter = "";
+    /** No arrow for this row. */
+    private static final byte SIDE_NONE  =  0;
+    /** This row calls at a platform configured as the left one. */
+    private static final byte SIDE_LEFT  = -1;
+    /** This row calls at a platform configured as the right one. */
+    private static final byte SIDE_RIGHT =  1;
+
+    private BERLabel[] arrowLabels = new BERLabel[0];
+    /** One entry per rendered row, resolved in update() so render() stays trivial. */
+    private byte[]     arrowSides  = new byte[0];
 
     @Override protected boolean showPlatform() { return false; }
 
     @Override
     protected float arrowReservedLeft(JREPlatformSettings settings) {
-        return settings.showArrow() ? ARROW_WIDTH : 0f;
+        return hasFilter(settings.showArrow(), settings.getLeftPlatform()) ? ARROW_WIDTH : 0f;
     }
 
     @Override
     protected float arrowReservedRight(JREPlatformSettings settings) {
-        return settings.showArrow() ? ARROW_WIDTH : 0f;
+        return hasFilter(settings.showArrow(), settings.getRightPlatform()) ? ARROW_WIDTH : 0f;
+    }
+
+    private static boolean hasFilter(boolean enabled, String filter) {
+        return enabled && filter != null && !filter.isBlank();
     }
 
     // ── tick ──────────────────────────────────────────────────────────────
@@ -75,55 +104,20 @@ public class BERJREPlatform extends AbstractJRERenderer<JREPlatformSettings> {
                        int light, boolean backSide) {
         super.render(graphics, partial, parent, light, backSide);
 
-        JREPlatformSettings settings = getDisplaySettings(graphics.blockEntity());
-        if (!settings.showArrow() || arrowLabels.length == 0) return;
+        int count = Math.min(arrowSides.length, arrowLabels.length);
+        if (count == 0) return;
 
         int totalW = graphics.blockEntity().getXSizeScaled() * 16;
 
-        for (BERLabel lbl : arrowLabels) {
-            String text = lbl.text.get().getString();
-            if (text.isBlank()) continue;
+        for (int i = 0; i < count; i++) {
+            byte side = arrowSides[i];
+            if (side == SIDE_NONE) continue;
 
-            boolean isPhysicalLeft  = text.equals(ARROW_LEFT);
-            boolean isPhysicalRight = text.equals(ARROW_RIGHT);
-
-            // Position is always determined by which side the station is on.
-            // x=3 = leftmost edge, x=totalW-3 = rightmost edge.
-            // The back face rendering matrix is already mirrored (180deg Y rotation),
-            // so x=3 appears on the viewer's left from the back face too.
-            // We only need to flip the arrow SYMBOL, and the position.
-            double y = lbl.position.get().y();
-            //if (isPhysicalLeft)  lbl.position.set(Point.of(3f, y));
-            //if (isPhysicalRight) lbl.position.set(Point.of(totalW - 3 - ARROW_WIDTH, y));
-
-            // On back face, flip arrow symbol (← becomes →, → becomes ←)
-            // because the station that was on the viewer's left from the front
-            // is now on the viewer's right from the back.
-            String symbol = text;
-            //if (backSide) {
-            //    if (isPhysicalLeft)  symbol = ARROW_RIGHT;
-            //    if (isPhysicalRight) symbol = ARROW_LEFT;
-            //}
-            if (!backSide) {
-                if (isPhysicalLeft)  lbl.position.set(Point.of(3f, y));
-                if (isPhysicalRight) lbl.position.set(Point.of(totalW - 3 - ARROW_WIDTH, y));
-            } else {
-                // Swap position, keep symbol — so viewer always sees the correct arrow
-                // pointing toward the correct side of the display
-                if (isPhysicalLeft){
-                    lbl.position.set(Point.of(totalW - 3 - ARROW_WIDTH, y));
-                    symbol = ARROW_RIGHT;
-                }
-                if (isPhysicalRight){
-                    lbl.position.set(Point.of(3f, y));
-                    symbol = ARROW_LEFT;
-                }
-            }
-            //lbl.render(graphics, light);
-            lbl.text.set(de.mrjulsen.mcdragonlib.util.TextUtils.text(symbol));
+            boolean left = side == SIDE_LEFT;
+            BERLabel lbl = arrowLabels[i];
+            lbl.text.set(TextUtils.text(left ? ARROW_LEFT : ARROW_RIGHT));
+            lbl.position.set(Point.of(left ? 3f : totalW - 3 - ARROW_WIDTH, 3f + i * LINE_HEIGHT));
             lbl.render(graphics, light);
-            // Restore original symbol so update() result is preserved
-            lbl.text.set(de.mrjulsen.mcdragonlib.util.TextUtils.text(text));
         }
     }
 
@@ -135,11 +129,16 @@ public class BERJREPlatform extends AbstractJRERenderer<JREPlatformSettings> {
         // AbstractJRERenderer populates lastDepartures and lays out rows
         super.update(level, pos, state, be, parent, reason);
 
+        if (!be.isController()) {
+            arrowLabels = new BERLabel[0];
+            arrowSides  = new byte[0];
+            return;
+        }
+
         JREPlatformSettings settings = getDisplaySettings(be);
         List<DisplayEntry> deps = lastDepartures;
         int count = deps.size();
 
-        // Rebuild arrow labels if count changed
         if (arrowLabels.length != count) {
             arrowLabels = new BERLabel[count];
             for (int i = 0; i < count; i++) {
@@ -147,68 +146,78 @@ public class BERJREPlatform extends AbstractJRERenderer<JREPlatformSettings> {
                 lbl.verticalScale.set(Pair.of(BASE_SCALE, BASE_SCALE));
                 lbl.horizontalScale.set(Pair.of(BASE_H_SCALE_MIN, BASE_SCALE));
                 lbl.preferredWidth.set(ARROW_WIDTH);
+                lbl.horizontalAlign.set(ETextAlignment.CENTER);
+                // A single glyph must never scroll inside its 6px slot.
+                lbl.horizontalScrollMode.set(EScrollMode.NEVER);
             }
         }
 
-        if (!settings.showArrow()) {
-            for (BERLabel lbl : arrowLabels) lbl.text.set(TextUtils.empty());
-            return;
-        }
+        arrowSides = new byte[count];
+        if (!settings.showArrow()) return;
+
+        String leftFilter  = settings.getLeftPlatform();
+        String rightFilter = settings.getRightPlatform();
+        String platformSuffix = loc("gui.crndisplaynext.jre.platform_suffix", "番線");
 
         for (int i = 0; i < count; i++) {
-            DisplayEntry stop = deps.get(i);
-            float y = 3 + i * LINE_HEIGHT;
+            BoardEntry raw = deps.get(i).getStationData().raw();
+            if (raw == null) continue;
 
-            // Arrow direction: match each stop's station name / platform number
-            // against the left/right filter strings the player configured.
-            //
-            // The player sets leftPlatform="T01", rightPlatform="T02" (exact or wildcard).
-            // Each stop's scheduled station name comes from the timetable and is always
-            // available regardless of how far the train is.
-            //
-            // Scheduled station is preferred (always populated from timetable).
-            // Real-time is checked as fallback.
-            String scTagName  = stop.getStationData().raw().scheduledStation().displayName();
-            String scPlatform = stop.getStationData().raw().scheduledStation().platform();
-            String rtTagName  = stop.getStationData().raw().station().displayName();
-            String rtPlatform = stop.getStationData().raw().station().platform();
+            boolean matchLeft  = matchesAny(leftFilter,  raw, platformSuffix);
+            boolean matchRight = matchesAny(rightFilter, raw, platformSuffix);
 
-            String leftFilter  = settings.getLeftPlatform();
-            String rightFilter = settings.getRightPlatform();
-
-            // Check if this stop's station matches the left or right filter.
-            // stationMatches(value, filter): value=stop's station name, filter=player input
-            boolean matchLeft  = matchAny(leftFilter,  scTagName, scPlatform, rtTagName, rtPlatform);
-            boolean matchRight = matchAny(rightFilter, scTagName, scPlatform, rtTagName, rtPlatform);
-
-            String arrow = "";
+            byte side = SIDE_NONE;
             if (matchLeft) {
-                arrow = ARROW_LEFT;
+                side = SIDE_LEFT;        // left wins when both filters match
             } else if (matchRight) {
-                arrow = ARROW_RIGHT;
+                side = SIDE_RIGHT;
             }
-
-            arrowLabels[i].text.set(TextUtils.text(arrow));
-            // x position is set in render() based on backSide flag
-            arrowLabels[i].position.set(Point.of(3f, y));
+            arrowSides[i] = side;
             arrowLabels[i].color.set(settings.getFontColor());
         }
+
+        logArrows(be, leftFilter, rightFilter, deps);
     }
 
     /**
-     * Returns true if ANY of the candidate values matches the given filter.
-     * The filter is what the player typed in the left/right platform box.
-     * Candidates include: the block entity's station filter string, real-time
-     * station name, scheduled station name, and platform numbers.
-     * Uses CRN's stationMatches() which supports * wildcards.
+     * True when any candidate value of the call's station matches the filter.
+     * Both the timetabled station and the real-time one are considered: a
+     * diverted train still has to get the arrow of the platform it really uses.
      */
-    private static boolean matchAny(String filter, String... candidates) {
+    private static boolean matchesAny(String filter, BoardEntry raw, String platformSuffix) {
         if (filter == null || filter.isBlank()) return false;
-        for (String c : candidates) {
-            if (c != null && !c.isBlank() && TrainUtils.stationMatches(c, filter)) return true;
+        return matches(filter, raw.station(), platformSuffix)
+            || matches(filter, raw.scheduledStation(), platformSuffix);
+    }
+
+    private static boolean matches(String filter, StationRef station, String platformSuffix) {
+        if (station == null || !station.isKnown()) return false;
+        String platform = station.platform();
+        return matchesCandidate(station.name(), filter)
+            || matchesCandidate(station.tagName(), filter)
+            || matchesCandidate(platform, filter)
+            || matchesCandidate(platform == null || platform.isBlank() ? "" : platform + platformSuffix, filter);
+    }
+
+    private static boolean matchesCandidate(String candidate, String filter) {
+        if (candidate == null || candidate.isBlank()) return false;
+        return TrainUtils.stationMatches(candidate.trim(), filter.trim());
+    }
+
+    /** Diagnostic only: lists what each row could have matched, at DEBUG level. */
+    private void logArrows(AdvancedDisplayBlockEntity be, String leftFilter,
+                           String rightFilter, List<DisplayEntry> deps) {
+        if (!CRNDisplayNextMod.LOGGER.isDebugEnabled()) return;
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < deps.size(); i++) {
+            StationRef st = deps.get(i).getStationData().raw().station();
+            if (i > 0) sb.append(", ");
+            sb.append('[').append(st.name()).append('/').append(st.tagName())
+              .append('/').append(st.platform()).append('=')
+              .append(arrowSides[i] == SIDE_LEFT ? "L" : arrowSides[i] == SIDE_RIGHT ? "R" : "-")
+              .append(']');
         }
-        return false;
+        CRNDisplayNextMod.LOGGER.debug("[Arrow] {} L='{}' R='{}' rows={}: {}",
+            be.getBlockPos(), leftFilter, rightFilter, deps.size(), sb);
     }
 }
-
-
