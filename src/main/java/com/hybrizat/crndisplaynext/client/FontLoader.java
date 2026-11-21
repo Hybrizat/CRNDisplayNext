@@ -110,13 +110,13 @@ public final class FontLoader {
 
     /** Japanese medium weight: ShinGo (user) → MPlus → Noto → SansSerif. */
     public static Font medium(float size) {
-        Font base = shingoMedium != null ? shingoMedium : (mplusMedium != null ? mplusMedium : FONTS.get("notosanscjksc-regular"));
+        Font base = shingoMedium != null ? shingoMedium : (mplusMedium != null ? mplusMedium : notoRegular);
         return derive(base, Font.PLAIN, size);
     }
 
     /** Japanese bold weight: ShinGo bold → MPlus bold → Noto bold → SansSerif bold. */
     public static Font bold(float size) {
-        Font base = shingoBold != null ? shingoBold : (mplusBold != null ? mplusBold : FONTS.get("notosanscjksc-bold"));
+        Font base = shingoBold != null ? shingoBold : (mplusBold != null ? mplusBold : notoBold);
         return derive(base, Font.BOLD, size);
     }
 
