@@ -51,8 +51,9 @@ Create: Railways Navigator Display Native Extended is an add-on mod for [Create:
 
 ### Passenger VIS
 
-- Upper part: category block, destination, current / next station, time
+- Upper part: category block, destination, current / next station, time; “show line color” decides whether the upper band is line- or category-coloured (line by default; the category badge always keeps the category colour)
 - Lower part: route ribbon, colour-banded per section; the pointer marks the current station while dwelling, and a green arrow points at the station ahead while running
+- Long station names shrink to the vertical space available instead of being clipped
 - Stations already passed are greyed out, and nothing is projected into the next cycle
 - Toggles for line colour, do-not-board text, connections, on-board stats and carriage index
 

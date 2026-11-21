@@ -27,6 +27,8 @@
   "gui.crndisplaynext.jre_left_platform": "← Left Platform",
   "gui.crndisplaynext.jre_right_platform": "→ Right Platform",
   "gui.crndisplaynext.jre_platform_hint": "Platform this train calls at (e.g. 1 or 1番線) or station name. Supports * wildcard. Empty = no arrow; a row matching both sides shows ←.",
+  "gui.crndisplaynext.jre_vis_ribbon_line": "Upper Band Uses Line Color",
+  "gui.crndisplaynext.jre_vis_ribbon_line.description": "Off: the category color is used, falling back to the line color when the category has none. The category badge always keeps the category color.",
   "display.createrailwaysnavigator.train_destination.jre_front": "JRE Front",
   "display.createrailwaysnavigator.train_destination.jre_side": "JRE Side",
   "display.createrailwaysnavigator.passenger_information.jre_vis": "JRE VIS",

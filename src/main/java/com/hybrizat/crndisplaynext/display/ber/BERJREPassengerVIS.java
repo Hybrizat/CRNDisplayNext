@@ -62,6 +62,8 @@ public class BERJREPassengerVIS implements AbstractAdvancedDisplayRenderer<JREVI
     private static final Color PASSED_COLOR = new Color(80, 80, 80); // Gray for passed stations
 
     private static final int FONT_STOPS = 22, FONT_TIME = 14;
+    /** Smallest size a vertical station name may shrink to before it is allowed to clip. */
+    private static final int FONT_STOPS_MIN = 10;
 
     enum Page { FULL_ROUTE, FIVE_STATION }
     /**
@@ -237,9 +239,12 @@ public class BERJREPassengerVIS implements AbstractAdvancedDisplayRenderer<JREVI
         if (stops.isEmpty()) return;
 
         // Build model from CRN data. The badge is the 種別 where one is configured and
-        // the line name otherwise; the ribbon colour follows whichever was chosen, and
-        // each stop below may override it with its own section's colour.
-        Color routeColor = toAwt(d.badgeColor(), GREEN);
+        // the line name otherwise; the badge therefore always takes the 種別 colour,
+        // while the upper band is either 種別- or line-coloured by setting. Each stop
+        // below may still override the band colour with its own section's colour.
+        Color lineColor = toAwt(d.lineColor(), GREEN);
+        Color catColor  = toAwt(d.categoryColor(), lineColor);
+        Color ribbon    = cfg.showLineColor() ? lineColor : catColor;
         String cat = d.badge();
         String timeStr = new DLTime(lv, DLTime.defaultTimeSystem())
             .format(ModClientConfig.TIME_FORMAT.get().getFormat(), TimeContext.INGAME, DLTime.defaultTimeSystem());
@@ -258,12 +263,12 @@ public class BERJREPassengerVIS implements AbstractAdvancedDisplayRenderer<JREVI
 
         UPPER.render(g, new UpperLCDRenderer.Model(
             dest,
-            cat, routeColor,
+            cat, catColor,
             prefix(d),
             stnName,
-            timeStr, routeColor));
+            timeStr, ribbon));
 
-        lower(g, stops, cfg.circularMode(), routeColor, d.waiting());
+        lower(g, stops, cfg.circularMode(), ribbon, d.waiting());
     }
 
     /** CRN colour to AWT, falling back when the line/category has no colour of its own. */
@@ -286,7 +291,7 @@ public class BERJREPassengerVIS implements AbstractAdvancedDisplayRenderer<JREVI
     private void lowerRows(Graphics2D g, List<TrainView.StopView> stops, Color rc, boolean dwelling) {
         int n = stops.size();
         if (n == 0) return;
-        Font nf = font(FONT_STOPS), tf = font(FONT_TIME);
+        Font tf = font(FONT_TIME);
 
         // Where the train is in the list. Passed stops sit in front of it, so the
         // pointer belongs on the first stop that is not passed — NOT on index 0, which
@@ -368,12 +373,16 @@ public class BERJREPassengerVIS implements AbstractAdvancedDisplayRenderer<JREVI
             int ptr = (localI % perLine) * stopsW;
             int line = (localI < perLine) ? 1 : 2;
             int lY = y + hLine * line + topPad * (line - 1);
-            
+
             de.mrjulsen.crn.api.core.StopVisitState visitState = stops.get(i).visitState();
             boolean isPassed = visitState == StopVisitState.PASSED;
             boolean active = !isPassed;
+            // A wrapped second row only has the gap between the first row's bar and
+            // its own bar to grow into; the first row has the whole upper area. Long
+            // names shrink to that space instead of being clipped at the screen edge.
+            int minTop = (line == 1) ? UH + 2 : (y + hLine + barH + 4);
             g.setColor(isPassed ? PASSED_COLOR : (active ? DARK_BG : INACTIVE));
-            drawVert(g, stops.get(i).name(), nf, x + ptr + stopsW / 2, lY - 7 - nf.getSize() * stops.get(i).name().length());
+            drawVertUp(g, stops.get(i).name(), x + ptr + stopsW / 2, lY - 7, minTop);
         }
 
         // Marks (draw_marks) — white ring r=11 active, small dot r=5 inactive,
@@ -474,7 +483,7 @@ public class BERJREPassengerVIS implements AbstractAdvancedDisplayRenderer<JREVI
 
     private void lowerCirc(Graphics2D g, List<TrainView.StopView> stops, Color rc, boolean dwelling) {
         int n = stops.size(), half = (n + 1) / 2;
-        Font nf = font(FONT_STOPS), tf = font(FONT_TIME);
+        Font tf = font(FONT_TIME);
         int cy = UH + 153, vO = 47, vI = 19, bO = 37, bI = 12, l = 15, r = 15, sw = 28;
         g.setColor(rc);
         g.fillRoundRect(l, cy - vO, SW - l - r, 2*vO, bO, bO);
@@ -500,9 +509,8 @@ public class BERJREPassengerVIS implements AbstractAdvancedDisplayRenderer<JREVI
             marker(g, cx, tB, cur);
             var s = stops.get(i);
             boolean passed = s.isPassed();
-            g.setFont(nf); g.setColor(passed ? PASSED_COLOR : DARK_BG);
-            String nm = s.name();
-            drawVert(g, nm, nf, cx, tB+4);
+            g.setColor(passed ? PASSED_COLOR : DARK_BG);
+            drawVertDown(g, s.name(), cx, tB + 4, SH - 22);
             if (!cur && !passed) eta(g, tf, s, cx, tB - 8);
         }
         int tn = n - half;
@@ -520,9 +528,8 @@ public class BERJREPassengerVIS implements AbstractAdvancedDisplayRenderer<JREVI
                     g.setColor(WHITE_BG); g.fillOval(cx - 5, tT - 5, 10, 10);
                     g.setColor(DARK_BG); g.drawOval(cx - 5, tT - 5, 10, 10);
                 }
-                g.setFont(nf); g.setColor(DARK_BG);
-                String nm = s.name();
-                drawVert(g, nm, nf, cx, tT - nf.getSize() * nm.length());
+                g.setColor(DARK_BG);
+                drawVertUp(g, s.name(), cx, tT, UH + 2);
                 eta(g, tf, s, cx, tT + 18);
             }
         }
@@ -605,20 +612,59 @@ public class BERJREPassengerVIS implements AbstractAdvancedDisplayRenderer<JREVI
         return FontLoader.bold(size);
     }
 
-    private void drawVert(Graphics2D g, String text, Font font, int cx, int top) {
-        text = com.hybrizat.crndisplaynext.client.KanjiConverter.toDisplay(text, font);
+    /**
+     * Vertical station name that grows upward from {@code bottom} and shrinks to fit
+     * the space down to {@code minTop}. JR East narrows the character size instead of
+     * clipping, which is what a long name such as 甘露平ティンバー needs.
+     */
+    private void drawVertUp(Graphics2D g, String name, int cx, int bottom, int minTop) {
+        String text = displayText(name);
+        int n = text.length();
+        if (n == 0) return;
+        int size = fitSize(n, bottom - minTop);
+        drawVertCells(g, text, cx, bottom - n * size, size);
+    }
+
+    /** Vertical station name that grows downward from {@code top}, shrinking to fit {@code maxBottom}. */
+    private void drawVertDown(Graphics2D g, String name, int cx, int top, int maxBottom) {
+        String text = displayText(name);
+        int n = text.length();
+        if (n == 0) return;
+        drawVertCells(g, text, cx, top, fitSize(n, maxBottom - top));
+    }
+
+    /** Per-character size that keeps {@code n} glyphs inside {@code available} pixels. */
+    private static int fitSize(int n, int available) {
+        if (n <= 0) return FONT_STOPS;
+        return Math.min(FONT_STOPS, Math.max(FONT_STOPS_MIN, available / n));
+    }
+
+    private static String displayText(String name) {
+        return com.hybrizat.crndisplaynext.client.KanjiConverter.toDisplay(name, font(FONT_STOPS));
+    }
+
+    /**
+     * Draws one glyph per {@code size}-tall cell, each in a font that can actually
+     * display it and centred both across the column and within its cell.
+     */
+    private void drawVertCells(Graphics2D g, String text, int cx, int top, int size) {
+        Font base = font(size);
         for (int j = 0; j < text.length(); j++) {
             char c = text.charAt(j);
-            Font f = FontLoader.resolveFor(font, c);
+            Font f = FontLoader.resolveFor(base, c);
             String ch = String.valueOf(c);
             // g.setFont(f) is REQUIRED: g.drawString renders with the font currently
             // set on the Graphics2D, not with the one passed to getFontMetrics(). The
-            // CJK fallback face has different metrics from the primary face, so
-            // measuring one and drawing the other shifted each name sideways.
+            // fallback faces have different metrics from the primary face, so
+            // measuring one and drawing the other shifted each glyph.
             g.setFont(f);
             var fm = g.getFontMetrics();
             int cw = fm.stringWidth(ch);
-            g.drawString(ch, cx - cw / 2, top + fm.getAscent() + j * f.getSize());
+            int cellTop = top + j * size;
+            // Baseline that centres the glyph's ink in its cell, so mixed fallback
+            // faces still sit on an even column.
+            int baseline = cellTop + (size + fm.getAscent() - fm.getDescent()) / 2;
+            g.drawString(ch, cx - cw / 2, baseline);
         }
     }
     /**

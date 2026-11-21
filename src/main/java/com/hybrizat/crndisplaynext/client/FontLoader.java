@@ -35,6 +35,8 @@ public final class FontLoader {
     /** All registered fonts, keyed by fontName and family (lowercase). */
     private static final Map<String, Font> FONTS = new HashMap<>();
     private static final Map<Long, Font> cache = new HashMap<>();
+    /** System default faces, keyed by style + size (see {@link #logicalFor}). */
+    private static final Map<Long, Font> LOGICAL_CACHE = new HashMap<>();
 
     // User-provided ShinGo (priority 1)
     private static Font shingoMedium, shingoBold, shingoLight;
@@ -47,15 +49,25 @@ public final class FontLoader {
         // 1. Bundled first (user files may override the map by name)
         for (String f : BUNDLED) {
             Font font = tryLoad(f);
-            if (font != null) register(font);
+            if (font != null) {
+                register(font);
+                // Keep the CJK fallback faces by file, not by name lookup: the map is
+                // keyed on the font's own name ("Noto Sans CJK SC Bold"), so a lookup
+                // for "notosanscjksc-bold" never matched and every char the main face
+                // lacked came out as tofu.
+                if (f.equals("NotoSansCJKsc-Bold.otf")) notoBold = font;
+                if (f.equals("NotoSansCJKsc-Regular.otf")) notoRegular = font;
+                if (f.equals("mplus-2p-medium.ttf")) mplusMedium = font;
+                if (f.equals("mplus-2p-bold.ttf")) mplusBold = font;
+            }
         }
-        mplusMedium = find("m+ 2p medium", "mplus2p-medium", "m+ 2p");
-        mplusBold = find("m+ 2p bold", "mplus2p-bold");
-        notoBold = FONTS.get("notosanscjksc-bold");
-        notoRegular = FONTS.get("notosanscjksc-regular");
+        if (mplusMedium == null) mplusMedium = find("m+ 2p medium", "mplus2p-medium", "m+ 2p");
+        if (mplusBold == null) mplusBold = find("m+ 2p bold", "mplus2p-bold");
         System.out.println("[FontLoader] registered: " + FONTS.keySet());
         System.out.println("[FontLoader] mplusMedium=" + (mplusMedium != null ? mplusMedium.getFontName() : "NULL")
-            + " mplusBold=" + (mplusBold != null ? mplusBold.getFontName() : "NULL"));
+            + " mplusBold=" + (mplusBold != null ? mplusBold.getFontName() : "NULL")
+            + " notoBold=" + (notoBold != null ? notoBold.getFontName() : "NULL")
+            + " notoRegular=" + (notoRegular != null ? notoRegular.getFontName() : "NULL"));
 
         // 2. User font folder — ShinGo files take top priority for Japanese
         Path fontDir = gameDir.toPath().resolve("crndisplaynext").resolve("fonts");
@@ -129,15 +141,51 @@ public final class FontLoader {
     /** Can this font render the character at all (no tofu)? */
     public static boolean canDisplay(Font font, char c) { return font != null && font.canDisplay(c); }
 
-    /** Resolve a font that can display the given character: primary first, otherwise
-     *  the bundled Noto CJK face in a matching weight, re-derived at the primary size. */
+    /**
+     * Resolve a font that can actually draw the given character.
+     *
+     * <p>Order: the primary face, the bundled Noto CJK face in a matching weight,
+     * then the JVM's logical font. The logical font is the last resort because the
+     * JVM resolves it through the operating system's own font linking, so anything
+     * the system can print wins over a missing-glyph box. Only when even that has no
+     * glyph do we return the primary and let it show its tofu.</p>
+     */
     public static Font resolveFor(Font primary, char c) {
         if (primary == null) return null;
         if (primary.canDisplay(c)) return primary;
-        Font base = (primary.getStyle() == Font.BOLD) ? notoBold : notoRegular;
+
+        Font base = wantsBold(primary) ? notoBold : notoRegular;
         if (base == null) base = notoBold != null ? notoBold : notoRegular;
-        if (base == null) return primary;
-        return derive(base, Font.PLAIN, primary.getSize2D());
+        if (base != null && base.canDisplay(c)) return derive(base, Font.PLAIN, primary.getSize2D());
+
+        Font logical = logicalFor(primary);
+        if (logical.canDisplay(c)) return logical;
+
+        return primary;
+    }
+
+    /**
+     * Whether a face is meant to look bold. The bundled faces are separate bold
+     * files whose {@code getStyle()} is PLAIN, so the style bit alone would pick the
+     * regular fallback for a bold station name.
+     */
+    private static boolean wantsBold(Font primary) {
+        return (primary.getStyle() & Font.BOLD) != 0
+            || primary.getFontName(Locale.ROOT).toLowerCase(Locale.ROOT).contains("bold");
+    }
+
+    /**
+     * The system default face at the primary's size and weight, cached per size.
+     * Java's logical fonts fall back across the installed system fonts, so this is
+     * the broadest coverage available and the right last resort for a stray kanji
+     * the bundled faces are missing.
+     */
+    private static Font logicalFor(Font primary) {
+        boolean bold = wantsBold(primary);
+        long key = ((long) (bold ? 1 : 0) << 40) | Math.round(primary.getSize2D() * 10);
+        return LOGICAL_CACHE.computeIfAbsent(key,
+            _k -> new Font(Font.SANS_SERIF, bold ? Font.BOLD : Font.PLAIN, 1)
+                .deriveFont(primary.getSize2D()));
     }
 
     private static Font find(String... substrings) {

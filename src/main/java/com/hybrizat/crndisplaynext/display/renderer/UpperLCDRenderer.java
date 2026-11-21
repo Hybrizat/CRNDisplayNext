@@ -77,7 +77,7 @@ public final class UpperLCDRenderer {
         if (m.category != null && !m.category.isBlank()) {
             LayoutConfig.Rect br = C.badgeRect();
             g.setClip(br.x(), br.y(), br.w(), br.h());
-            drawBadge(g, m.category, route, br);
+            drawBadge(g, m.category, m.categoryColor, br);
             g.setClip(null);
         }
     }
@@ -98,7 +98,7 @@ public final class UpperLCDRenderer {
         }
     }
 
-    private void drawBadge(Graphics2D g, String name, Color routeColor, LayoutConfig.Rect br) {
+    private void drawBadge(Graphics2D g, String name, Color categoryColor, LayoutConfig.Rect br) {
         Font bf = Fonts.medium(C.badgeFontSize());
         g.setFont(bf);
         name = com.hybrizat.crndisplaynext.client.KanjiConverter.toDisplay(name, bf);
@@ -106,9 +106,10 @@ public final class UpperLCDRenderer {
         int bw = fm.stringWidth(name) + C.badgePaddingH();
         int bh = fm.getHeight() + C.badgePaddingV();
         int bx = br.x(), by = br.y() + (br.h() - bh) / 2;
+        Color badge = categoryColor != null ? categoryColor : C.defaultRouteColor();
         g.setColor(Color.BLACK);
         g.fillRoundRect(bx - 3, by - 3, Math.min(bw + 6, br.w() + 6), bh + 6, 8, 8);
-        g.setColor(routeColor);
+        g.setColor(badge);
         g.fillRoundRect(bx + 4, by + 4, Math.min(bw - 8, br.w() - 8), bh - 8, 4, 4);
         g.setColor(C.fgColor());
         g.fillRoundRect(bx + 6, by + 6, Math.min(bw - 12, br.w() - 12), bh - 12, 2, 2);

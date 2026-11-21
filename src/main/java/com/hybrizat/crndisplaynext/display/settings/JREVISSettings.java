@@ -70,11 +70,36 @@ public class JREVISSettings extends BasicDisplaySettings implements
     public void buildGui(GuiBuilderContext context) {
         this.buildColorGui(context);
         this.buildTimeDisplayGui(context);
-        this.buildShowLineColorGui(context);
+        this.buildRibbonColorGui(context);
         this.buildShowDoNotBoardTextGui(context);
         this.buildShowConnectionGui(context);
         this.buildShowStatsGui(context);
         this.buildCarriageIndexGui(context);
+    }
+
+    /**
+     * Which colour the upper band is painted with. {@link #showLineColor()} is the
+     * standard "use the line colour" switch, but its generic label says nothing about
+     * what it actually changes here, and it used to change nothing at all in the VIS —
+     * the band was always painted with the 種別 colour. So this row carries the
+     * setting with a label that names the band.
+     */
+    private void buildRibbonColorGui(GuiBuilderContext context) {
+        DLPanel line = context.container().addLine("crndisplaynext.jre_vis_ribbon_color");
+        DLCheckBox box = new DLCheckBox(0, 0, 0, CreateButton.HEIGHT);
+        box.text.set((Component) TextUtils.translate("gui." + CRNDisplayNextMod.MOD_ID + ".jre_vis_ribbon_line"));
+        box.checked.set(showLineColor);
+        box.layoutContraint.set(FlowLayout.FlowConstraint.FILL);
+        box.tooltip.set(new de.mrjulsen.mcdragonlib.client.gui.widgets.components.DLTooltip(
+            java.util.List.of(
+                TextUtils.translate("gui." + CRNDisplayNextMod.MOD_ID + ".jre_vis_ribbon_line"),
+                TextUtils.translate("gui." + CRNDisplayNextMod.MOD_ID + ".jre_vis_ribbon_line.description")),
+            220));
+        box.addEventListener(DLToggleButton.CheckedChangedEvent.class, (s, e) -> {
+            setShowLineColor(e.checked());
+            return false;
+        });
+        line.addComponent(box);
     }
 
 
