@@ -28,10 +28,10 @@ public final class FontLoader {
         "mplus-2p-bold.ttf",
         "mplus-2p-medium.ttf",
         "mplus-2p-light.ttf",
-        "HelveticaNeue-Bold.otf",
-        "HelveticaNeue-Medium.otf",
-        "HelveticaNeue-Roman.otf",
-        "NeueFrutigerWorld-Bold.otf",
+        // SIL OFL stand-in for Helvetica Neue (metrically Arial-compatible, so the
+        // clock keeps its proportions). Helvetica itself is not distributed.
+        "LiberationSans-Regular.ttf",
+        "LiberationSans-Bold.ttf",
         "NotoSansCJKsc-Bold.otf",
         "NotoSansCJKsc-Regular.otf",
     };
@@ -48,6 +48,8 @@ public final class FontLoader {
     private static Font mplusMedium, mplusBold;
     // Bundled Noto (CJK coverage - per-char fallback target)
     private static Font notoBold, notoRegular;
+    // Latin faces: bundled Liberation Sans, replaceable by a user Helvetica/Arial
+    private static Font latinRegular, latinBold;
 
     public static void init(File gameDir) {
         // 1. Bundled first (user files may override the map by name)
@@ -63,6 +65,8 @@ public final class FontLoader {
                 if (f.equals("NotoSansCJKsc-Regular.otf")) notoRegular = font;
                 if (f.equals("mplus-2p-medium.ttf")) mplusMedium = font;
                 if (f.equals("mplus-2p-bold.ttf")) mplusBold = font;
+                if (f.equals("LiberationSans-Regular.ttf")) latinRegular = font;
+                if (f.equals("LiberationSans-Bold.ttf")) latinBold = font;
             }
         }
         if (mplusMedium == null) mplusMedium = find("m+ 2p medium", "mplus2p-medium", "m+ 2p");
@@ -71,7 +75,9 @@ public final class FontLoader {
         System.out.println("[FontLoader] mplusMedium=" + (mplusMedium != null ? mplusMedium.getFontName() : "NULL")
             + " mplusBold=" + (mplusBold != null ? mplusBold.getFontName() : "NULL")
             + " notoBold=" + (notoBold != null ? notoBold.getFontName() : "NULL")
-            + " notoRegular=" + (notoRegular != null ? notoRegular.getFontName() : "NULL"));
+            + " notoRegular=" + (notoRegular != null ? notoRegular.getFontName() : "NULL")
+            + " latinRegular=" + (latinRegular != null ? latinRegular.getFontName() : "NULL")
+            + " latinBold=" + (latinBold != null ? latinBold.getFontName() : "NULL"));
 
         // 2. User font folder — ShinGo files take top priority for Japanese
         Path fontDir = gameDir.toPath().resolve("crndisplaynext").resolve("fonts");
@@ -93,6 +99,13 @@ public final class FontLoader {
                                     shingoBold = font;
                                 if (shingoLight == null && low.contains("light"))
                                     shingoLight = font;
+                            }
+                            // Helvetica / Arial are not distributed either. A licensed
+                            // copy in this folder replaces the bundled Liberation Sans,
+                            // which is metrically compatible with both.
+                            if (low.contains("helvetica") || low.contains("arial") || low.contains("liberation")) {
+                                if (looksBold(low, font)) latinBold = font;
+                                else latinRegular = font;
                             }
                         } catch (Exception ignored) {}
                     }
@@ -124,22 +137,32 @@ public final class FontLoader {
         return derive(base, Font.BOLD, size);
     }
 
-    /** Latin time font: HelveticaNeue-Bold → MPlus bold → SansSerif bold. */
+    /** Latin time font: user Helvetica/Arial → bundled Liberation Sans Bold. */
     public static Font time(float size) {
-        Font base = get("HelveticaNeue-Bold", "Helvetica Neue");
-        return derive(base != null ? base : mplusBold, Font.BOLD, size);
+        return derive(latinBold, Font.BOLD, size);
     }
 
-    /** Latin clock font: HelveticaNeue-Roman → Helvetica → SansSerif. */
+    /** Latin clock font: user Helvetica/Arial → bundled Liberation Sans Regular. */
     public static Font clock(float size) {
-        Font base = get("HelveticaNeue-Roman", "Helvetica");
-        return derive(base, Font.PLAIN, size);
+        return derive(latinRegular, Font.PLAIN, size);
     }
 
-    /** Station-code badge typeface: Frutiger (NeueFrutigerWorld-Bold) → SansSerif bold. */
+    /**
+     * Station-code badge typeface. Neue Frutiger World is not distributed; the
+     * humanist Latin of the bundled Noto Sans is the closest stand-in, and a
+     * user-supplied Frutiger file takes precedence.
+     */
     public static Font badge(float size) {
-        Font base = get("NeueFrutigerWorld-Bold", "Frutiger");
+        Font base = find("frutiger");
+        if (base == null) base = notoBold != null ? notoBold : notoRegular;
         return derive(base, Font.BOLD, size);
+    }
+
+    /** Whether a user font file is a bold face, by file name and by font name. */
+    private static boolean looksBold(String fileName, Font font) {
+        if (fileName.contains("bold") || fileName.contains("heavy") || fileName.contains("black")) return true;
+        String name = font.getFontName(Locale.ROOT).toLowerCase(Locale.ROOT);
+        return name.contains("bold") || name.contains("heavy") || name.contains("black");
     }
 
     /** Can this font render the character at all (no tofu)? */

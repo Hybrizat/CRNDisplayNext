@@ -80,6 +80,31 @@ Create: Railways Navigator Display Native Extended 是 [Create: Railways Navigat
 - 单人游戏：放进 `mods` 即可
 - 专用服务器：**服务端也需要安装**。直通区段的行先与自定义图片显示依赖服务端解析／下载，只装客户端时这两项不生效，其余显示正常
 
+### 字体
+
+随模组分发的只有可自由再分发的字体：
+
+| 用途 | 内置字体 | 授权 |
+|---|---|---|
+| 日文主字体 | M+ 2P（medium／bold／light） | M+ FONTS LICENSE |
+| 缺字补充 | Noto Sans CJK（仅补 M+ 没有的字） | SIL OFL 1.1 |
+| 拉丁／时钟 | Liberation Sans（与 Helvetica 度量兼容，字形接近） | SIL OFL 1.1 |
+
+字体授权全文放在 `assets/crndisplaynext/fonts/` 下（`LiberationSans-OFL.txt`、`NotoSans-OFL.txt`）。
+
+需要**授权**的字体不随模组分发，但可以自行放进 `<游戏目录>/crndisplaynext/fonts/`（`.otf`／`.ttf`）：
+
+- `ShinGo`：文件名含 `shingo`／`shin-go`，`Medium`／`Regular` 与 `Bold` 两个字重都放效果最好
+- `Helvetica Neue`／`Arial`：文件名含 `helvetica`／`arial`，替换内置的 Liberation Sans
+- `Neue Frutiger World`：文件名含 `frutiger`，用于站名徽章
+
+匹配顺序：
+
+- 日文主字体：ShinGo → M+ → Noto Sans → 系统默认字体
+- 逐字补缺：主字体 → M+ → Noto Sans → 系统默认字体（只换缺的那一个字）
+- 拉丁／时钟：用户 Helvetica／Arial → Liberation Sans
+- 站名徽章：用户 Frutiger → Noto Sans
+
 ---
 
 ## 从 0.2.2 升级
@@ -90,6 +115,7 @@ Create: Railways Navigator Display Native Extended 是 [Create: Railways Navigat
 - 移除「隐藏技术停车」，请改用 CRN 原生的通过站／技术停车设置
 - 终点站改为「当前区段的终点」，并开始尊重车站黑名单
 - 侧面幕左侧色块由列车类别改为线路名称
+- 不再内置 Helvetica Neue 与 Neue Frutiger World（商业字体），时钟改用 Liberation Sans，站名徽章改用 Noto Sans；有授权的用户可放进 `crndisplaynext/fonts/` 恢复原字体
 
 ---
 

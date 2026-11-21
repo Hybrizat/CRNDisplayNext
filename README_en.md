@@ -80,6 +80,31 @@ Create: Railways Navigator Display Native Extended is an add-on mod for [Create:
 - Singleplayer: drop the mod into `mods`
 - Dedicated server: **the server needs it as well**. Resolving through-service destinations and downloading custom images both happen server-side; with a client-only install those two features do not work, and everything else displays normally
 
+### Fonts
+
+Only freely redistributable faces ship with the mod:
+
+| Use | Bundled face | Licence |
+|---|---|---|
+| Japanese body | M+ 2P (medium / bold / light) | M+ FONTS LICENSE |
+| Missing glyphs | Noto Sans CJK (fills what M+ lacks) | SIL OFL 1.1 |
+| Latin / clock | Liberation Sans (metric-compatible with Helvetica, similar shapes) | SIL OFL 1.1 |
+
+Full licence texts are shipped in `assets/crndisplaynext/fonts/` (`LiberationSans-OFL.txt`, `NotoSans-OFL.txt`).
+
+Fonts that need a licence are **not** distributed, but can be dropped into `<game dir>/crndisplaynext/fonts/` (`.otf` / `.ttf`):
+
+- `ShinGo`: file name containing `shingo` / `shin-go`; supply both the `Medium` / `Regular` and the `Bold` weight for a consistent look
+- `Helvetica Neue` / `Arial`: file name containing `helvetica` / `arial`, replacing the bundled Liberation Sans
+- `Neue Frutiger World`: file name containing `frutiger`, used for the station badge
+
+Resolution order:
+
+- Japanese body: ShinGo → M+ → Noto Sans → system default
+- Per-glyph gaps: the primary → M+ → Noto Sans → system default (only the missing character is substituted)
+- Latin / clock: user Helvetica / Arial → Liberation Sans
+- Station badge: user Frutiger → Noto Sans
+
 ---
 
 ## Upgrading from 0.2.2
@@ -90,6 +115,7 @@ Create: Railways Navigator Display Native Extended is an add-on mod for [Create:
 - "Hide technical stops" has been removed — use CRN's own pass-through / technical stop settings instead
 - The destination is now the end of the current section, and the station blacklist is honoured
 - The side display's left block shows the line name instead of the train category
+- Helvetica Neue and Neue Frutiger World are no longer bundled (commercial faces); the clock now uses Liberation Sans and the station badge uses Noto Sans, and licensed users can restore the originals by dropping them into `crndisplaynext/fonts/`
 
 ---
 
