@@ -15,7 +15,11 @@ import java.util.Map;
  * Priority for Japanese text:
  *   1. User-provided ShinGo fonts (<gameDir>/crndisplaynext/fonts/ShinGoPr6N-*.otf)
  *   2. Bundled MPlus 2p fonts (mplus-2p-medium/bold/light.ttf)
- *   3. Noto Sans CJK / SansSerif fallback
+ *   3. Bundled Noto Sans CJK — fills the gaps M+ does not cover
+ *   4. The system default face, for anything the above are missing
+ *
+ * The same order is used per glyph in {@link #resolveFor}, so a ShinGo install
+ * still falls back to M+, then Noto, then the system font.
  */
 public final class FontLoader {
 
@@ -144,19 +148,31 @@ public final class FontLoader {
     /**
      * Resolve a font that can actually draw the given character.
      *
-     * <p>Order: the primary face, the bundled Noto CJK face in a matching weight,
-     * then the JVM's logical font. The logical font is the last resort because the
-     * JVM resolves it through the operating system's own font linking, so anything
-     * the system can print wins over a missing-glyph box. Only when even that has no
+     * <p>Only the gaps of the primary face are filled; the text stays in the
+     * primary for every character it has. The face order is the same one used to
+     * choose the primary: bundled M+ first, then the bundled Noto CJK face, then
+     * the JVM's logical font. The logical font is the last resort because the JVM
+     * resolves it through the operating system's own font linking, so anything the
+     * system can print wins over a missing-glyph box. Only when even that has no
      * glyph do we return the primary and let it show its tofu.</p>
      */
     public static Font resolveFor(Font primary, char c) {
         if (primary == null) return null;
         if (primary.canDisplay(c)) return primary;
 
-        Font base = wantsBold(primary) ? notoBold : notoRegular;
-        if (base == null) base = notoBold != null ? notoBold : notoRegular;
-        if (base != null && base.canDisplay(c)) return derive(base, Font.PLAIN, primary.getSize2D());
+        boolean bold = wantsBold(primary);
+
+        // M+ comes before Noto so a ShinGo install still gets the same face for a
+        // gap that M+ can fill, instead of mixing in Noto glyphs first.
+        Font mplus = bold
+            ? (mplusBold != null ? mplusBold : mplusMedium)
+            : (mplusMedium != null ? mplusMedium : mplusBold);
+        if (mplus != null && mplus.canDisplay(c)) return derive(mplus, Font.PLAIN, primary.getSize2D());
+
+        Font noto = bold
+            ? (notoBold != null ? notoBold : notoRegular)
+            : (notoRegular != null ? notoRegular : notoBold);
+        if (noto != null && noto.canDisplay(c)) return derive(noto, Font.PLAIN, primary.getSize2D());
 
         Font logical = logicalFor(primary);
         if (logical.canDisplay(c)) return logical;
